@@ -41,11 +41,12 @@ class AppleOauthView(APIView):
         try:
             token_data = exchange_apple_auth_code(auth_code=auth_code, APPLE_DATA= self.APPLE_DATA)
             logger.debug(token_data)
+            logger.debug(type(token_data))
             # Todo: Handle user sign up or login here based on the id_token
             return Response(token_data)  # Send the token data back as response
         except ValueError as e:
             logger.debug(str(e))
-            return Response({'error': 'invalid code'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(e.args[0], status=status.HTTP_400_BAD_REQUEST)
 
         """
             STEP 2. 
@@ -55,10 +56,11 @@ class AppleOauthView(APIView):
                 "expires_in": 3600,
                 "refresh_token": "rf5430a91dadf...",
                 "id_token": "eyJraWQiOiJyczBNM2t...
-            }
+            } (dict)
         """
-            access_token = token_data
-    
+        access_token = token_data.get('access_token')
+        refresh_token = token_data.get('refresh_token')
+
 
 
 

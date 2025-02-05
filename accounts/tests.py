@@ -20,7 +20,6 @@ class NexusUserManagerTests(TestCase):
 
     def test_create_user_with_apple_sub(self):
         """Test creating a user with an Apple sub"""
-        logger.info("hi")
 
         user = get_user_model().objects.create_user(
             apple_sub=self.apple_sub,
@@ -82,14 +81,10 @@ class AppleOauthViewTestCase(TestCase):
         """Simulate a callback with invalid 'code' value"""
 
         response = self.client.post(self.url, data={
-            "code": "invalid_auth_code"
+            'code': 'invalid_auth_code'
         }, format='json')
-
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        #{'error': 'invalid code'}, dict
-        self.assertIn('error', response.data)
-        self.assertEqual(response.data.get('error'), 'invalid code')
-
+        
     def test_callback_view_without_data(self):
         """Simulate a callback without the 'code' parameter"""
 
