@@ -185,10 +185,19 @@ LOGGING = {
             'formatter': 'standard',
         },
         'test_file': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             #'filters': ['require_debug_true'],
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': BASE_DIR / 'logs/test.log',
+            'maxBytes': 1024*1024*5,  # 5 MB
+            'backupCount': 5,
+            'formatter': 'standard',
+        },
+        'debug_file': {
+            'level': 'DEBUG',
+            #'filters': ['require_debug_true'],
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs/debug.log',
             'maxBytes': 1024*1024*5,  # 5 MB
             'backupCount': 5,
             'formatter': 'standard',
@@ -205,8 +214,8 @@ LOGGING = {
             'propagate': False,
         },
         'accounts' : {
-            'handlers' : ['test_file'],
-            'level' : 'INFO',
+            'handlers' : ['debug_file', 'test_file'],
+            'level' : 'DEBUG',
             'progatate' : False
         },
     }

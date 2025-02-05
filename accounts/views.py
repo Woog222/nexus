@@ -1,5 +1,4 @@
 from django.http import QueryDict
-from django.utils import timezone
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -7,83 +6,60 @@ from rest_framework import status
 
 import requests, logging, jwt, os
 from datetime import timedelta
+from dotenv import load_dotenv
 
+from .utils import generate_apple_client_secret, exchange_apple_auth_code
+
+
+
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 class AppleOauthView(APIView):
-    """Handles Apple OAuth login callback and token exchange."""
-    
-    APPLE_CLIENT_ID = os.getenv("APPLE_CLIENT_ID")
-    APPLE_KEY_ID = os.getenv("APPLE_KEY_ID")
-    APPLE_TEAM_ID= os.getenv("APPLE_TEAM_ID")
-    APPLE_REDIRECT_URI = "https://www.cvan.shop/apple/redirected/"
-    APPLE_PUBLIC_KEY_URL = "https://appleid.apple.com/auth/keys"
-    APPLE_TOKEN_URL = "https://appleid.apple.com/auth/token"
+    """ Handles Apple OAuth login callback and token exchange. """
 
+    with open("accounts/private/apple_authkey.p8", "r") as f:
+        APPLE_PRIVATE_KEY = f.read()
+    APPLE_DATA = {
+        'APPLE_CLIENT_ID' : os.getenv("APPLE_CLIENT_ID"),
+        'APPLE_KEY_ID' : os.getenv("APPLE_KEY_ID"),
+        'APPLE_TEAM_ID': os.getenv("APPLE_TEAM_ID"),
+        'APPLE_REDIRECT_URI' : "https://www.cvan.shop/accounts/oauth/apple/callback/",
+        'APPLE_PUBLIC_KEY_URL' : "https://appleid.apple.com/auth/keys",
+        'APPLE_TOKEN_URL' : "https://appleid.apple.com/auth/token",
+        'APPLE_PRIVATE_KEY' : APPLE_PRIVATE_KEY,
+    }
 
     def post(self, request, *args, **kwargs):
 
-        headers = {key: value for key, value in request.META.items() if key.startswith('HTTP_')}
-        logger.debug(f"headers : \n{headers}")
-        logger.debug(f"request.body : {request.body}")
-        # Parse the form data from request.body
-        body = request.body.decode('utf-8')  # Convert bytes to string
-        data = QueryDict(body)  # Parse the form data
-        auth_code = data.get("code")  # Extract the 'code' value
-        
+        """
+            STEP 1. Validate the authorization grant code
+        """
+        auth_code = request.data.get("code")
         if not auth_code:
-            return Response({"error": "Authorization code is missing"}, status=status.HTTP_400_BAD_REQUEST)
-
+            return Response({"error": "code is missing"}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            # Exchange authorization code for tokens
-            token_data = self.exchange_apple_auth_code(auth_code)
-            
+            token_data = exchange_apple_auth_code(auth_code=auth_code, APPLE_DATA= self.APPLE_DATA)
+            logger.debug(token_data)
             # Todo: Handle user sign up or login here based on the id_token
-            
             return Response(token_data)  # Send the token data back as response
         except ValueError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.debug(str(e))
+            return Response({'error': 'invalid code'}, status=status.HTTP_400_BAD_REQUEST)
+
+        """
+            STEP 2. 
+            {
+                "access_token": "a7f9eb52b7b70...",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "refresh_token": "rf5430a91dadf...",
+                "id_token": "eyJraWQiOiJyczBNM2t...
+            }
+        """
+            access_token = token_data
     
-    def exchange_apple_auth_code(self, auth_code: str):
-        """Exchange Apple authorization code for access and identity tokens."""
-        
-        data = {
-            "client_id": self.APPLE_CLIENT_ID,  # Your app's Bundle ID / Service ID
-            "client_secret": self.generate_apple_client_secret(),
-            "code": auth_code,
-            "grant_type": "authorization_code",
-            "redirect_uri": self.APPLE_REDIRECT_URI,  # If used in web flow
-        }
 
-        # Exchange the authorization code for tokens via Apple API
-        response = requests.post(self.APPLE_TOKEN_URL, data=data)
 
-        if response.status_code != 200:
-            raise ValueError(f"Apple token exchange failed: {response.json()}")
-        
-        return response.json()  # Returns access_token, id_token, refresh_token
 
-    def generate_apple_client_secret(self):
-        """Generate JWT client_secret for Apple API authentication."""
-        
-        now = timezone.now()
-        headers = {
-            'kid': self.APPLE_KEY_ID  # Key ID for Apple's JWT signing
-        }
 
-        payload = {
-            'iss': self.APPLE_TEAM_ID,  # Apple Developer Team ID
-            'iat': now.timestamp(),
-            'exp': (now + timedelta(days=180)).timestamp(),  # Valid for 180 days
-            'aud': 'https://appleid.apple.com',
-            'sub': self.APPLE_CLIENT_ID,  # Your App's Bundle ID / Service ID
-        }
-
-        client_secret = jwt.encode(
-            payload,
-            self.APPLE_PRIVATE_KEY,
-            algorithm='ES256',
-            headers=headers,
-        )
-
-        return client_secret

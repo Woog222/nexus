@@ -2,6 +2,7 @@
 **/__pycache__
 logs/*
 db.sqlite3
+**/private/*
 
 !**/.gitkeep
 !**/readme.txt

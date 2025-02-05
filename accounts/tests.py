@@ -1,7 +1,12 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-import logging
+from rest_framework import status
+from rest_framework.test import APIClient
+
+import logging, requests, json
+
+from .views import AppleOauthView
 
 logger = logging.getLogger(__name__)
 
@@ -15,14 +20,13 @@ class NexusUserManagerTests(TestCase):
 
     def test_create_user_with_apple_sub(self):
         """Test creating a user with an Apple sub"""
+        logger.info("hi")
 
-        logger.info("test_create_user_with_apple_sub started")
         user = get_user_model().objects.create_user(
             apple_sub=self.apple_sub,
             email=self.email,
         )
 
-        # Ensure user was created successfully
         self.assertEqual(user.apple_sub, self.apple_sub)
         self.assertEqual(user.email, self.email)
         self.assertTrue(user.is_active)
@@ -44,7 +48,6 @@ class NexusUserManagerTests(TestCase):
             email=self.email,
         )
 
-        # Ensure superuser fields are set correctly
         self.assertEqual(user.apple_sub, self.apple_sub)
         self.assertEqual(user.email, self.email)
         self.assertTrue(user.is_staff)
@@ -56,7 +59,6 @@ class NexusUserManagerTests(TestCase):
             apple_sub=self.apple_sub,
             email=self.email,
         )
-        # Ensure that the password is unusable
         self.assertFalse(user.has_usable_password())  # Should be False due to OAuth
 
 
@@ -67,3 +69,33 @@ class NexusUserManagerTests(TestCase):
             email=self.email,
         )
         self.assertEqual(str(user), self.apple_sub)
+
+
+
+class AppleOauthViewTestCase(TestCase):
+    
+    def setUp(self):
+        self.client = APIClient()  
+        self.url = "/accounts/oauth/apple/callback/"  
+    
+    def test_callback_view_with_invalid_data(self):
+        """Simulate a callback with invalid 'code' value"""
+
+        response = self.client.post(self.url, data={
+            "code": "invalid_auth_code"
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        #{'error': 'invalid code'}, dict
+        self.assertIn('error', response.data)
+        self.assertEqual(response.data.get('error'), 'invalid code')
+
+    def test_callback_view_without_data(self):
+        """Simulate a callback without the 'code' parameter"""
+
+        response = self.client.post(self.url, data={}, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # {'error' : 'code is missing'}, dict
+        self.assertIn('error', response.data)
+        self.assertEqual(response.data.get('error'), "code is missing")
