@@ -1,6 +1,9 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+import logging
+
+logger = logging.getLogger(__name__)
 
 class NexusUserManagerTests(TestCase):
     """Test custom user manager methods"""
@@ -12,6 +15,8 @@ class NexusUserManagerTests(TestCase):
 
     def test_create_user_with_apple_sub(self):
         """Test creating a user with an Apple sub"""
+
+        logger.info("test_create_user_with_apple_sub started")
         user = get_user_model().objects.create_user(
             apple_sub=self.apple_sub,
             email=self.email,

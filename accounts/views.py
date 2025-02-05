@@ -1,14 +1,14 @@
 from django.http import QueryDict
+from django.utils import timezone
+from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-import requests
-import jwt
-import os
-from datetime import timedelta
-from django.utils import timezone
-from django.conf import settings
 
+import requests, logging, jwt, os
+from datetime import timedelta
+
+logger = logging.getLogger(__name__)
 
 class AppleOauthView(APIView):
     """Handles Apple OAuth login callback and token exchange."""
@@ -22,6 +22,10 @@ class AppleOauthView(APIView):
 
 
     def post(self, request, *args, **kwargs):
+
+        headers = {key: value for key, value in request.META.items() if key.startswith('HTTP_')}
+        logger.debug(f"headers : \n{headers}")
+        logger.debug(f"request.body : {request.body}")
         # Parse the form data from request.body
         body = request.body.decode('utf-8')  # Convert bytes to string
         data = QueryDict(body)  # Parse the form data
