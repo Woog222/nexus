@@ -5,6 +5,11 @@ name = "pypi"
 
 [packages]
 django = "*"
+jwt = "*"
+requests = "*"
+python-dotenv = "*"
+djangorestframework = "*"
+uwsgi = "*"
 
 [dev-packages]
 

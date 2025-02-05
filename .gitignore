@@ -1,2 +1,7 @@
 **/.env
 **/__pycache__
+logs/*
+db.sqlite3
+
+!**/.gitkeep
+!**/readme.txt
