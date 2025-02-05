@@ -8,8 +8,16 @@ import requests, logging, jwt, os
 from datetime import timedelta
 from dotenv import load_dotenv
 
-from .utils import generate_apple_client_secret, exchange_apple_auth_code, validate_apple_id_token
-
+from .models import NexusUser
+from .utils import (
+    generate_apple_client_secret, 
+    exchange_apple_auth_code, 
+    validate_apple_id_token,
+    create_access_token,
+    create_refresh_token,
+    refresh_access_token,
+    validate_access_token,
+)
 
 
 load_dotenv()
@@ -33,31 +41,32 @@ class AppleOauthView(APIView):
     def post(self, request, *args, **kwargs):
 
         """
-            STEP 1. Validate the authorization grant code
-        """
-        auth_code = request.data.get("code")
-        if not auth_code:
-            return Response({"error": "code is missing"}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            token_data = exchange_apple_auth_code(auth_code=auth_code, APPLE_DATA= self.APPLE_DATA)
-            logger.debug(token_data)
-            logger.debug(type(token_data))
-            # Todo: Handle user sign up or login here based on the id_token
-            return Response(token_data)  # Send the token data back as response
-        except ValueError as e:
-            logger.debug(str(e))
-            return Response(e.args[0], status=status.HTTP_400_BAD_REQUEST)
-
-        """
-            STEP 2. Validate and decode the id_token
+            STEP 1. Validate the authorization grant code 
+            and get a token data which is like : 
             {
                 "access_token": "a7f9eb52b7b70...",
                 "token_type": "Bearer",
                 "expires_in": 3600,
                 "refresh_token": "rf5430a91dadf...",
                 "id_token": "eyJraWQiOiJyczBNM2t...
-            } (dict)
+            } (token_data, dict)
         """
+        auth_code = request.data.get("code")
+        if not auth_code:
+            return Response({"error": "code is missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # token_data is ensured to have keys commented above
+        try:
+            token_data = exchange_apple_auth_code(auth_code=auth_code, APPLE_DATA= self.APPLE_DATA)
+        except ValueError as e:
+            logger.debug(str(e))
+            return Response(e.args[0], status=status.HTTP_400_BAD_REQUEST)
+
+        """
+            STEP 2. Validate and decode the id_token
+        """
+
+        # id_token_decoded is ensured to have 'sub' and 'email'
         try:
             id_token_decoded = validate_apple_id_token(
                 id_token = token_data.get('id_token'), 
@@ -67,6 +76,32 @@ class AppleOauthView(APIView):
             return Response(e.args[0], status=status.HTTP_400_BAD_REQUEST)
 
 
+        """
+            STEP 3. Issue JWT tokens and update user data.
+        """
+        user_id = id_token_decoded.get("sub")
+        email = id_token_decoded.get("email")
+        apple_access_token = token_data.get("access_token")
+        apple_refresh_token = token_data.get("refresh_token")
+        nexus_access_token = create_access_token(user_id = user_id, email=email)
+        nexus_refresh_token = create_refresh_token(user_id = user_id)
 
+        user, created = NexusUser.objects.update_or_create(
+            user_id=user_id, 
+            defaults={
+                "email": email,
+                "apple_access_token": apple_access_token,
+                "apple_refresh_token": apple_refresh_token,
+                "nexus_access_token": nexus_access_token,
+                "nexus_refresh_token": nexus_refresh_token,
+            }
+        )
 
+        return Response({
+            'user_id' : user_id,
+            'email' : email,
+            'access_token' : nexus_access_token,
+            'refresh_token' : nexus_refresh_token,
+            'created' : 'yes' if created else 'no'
+        }, status = HTTP_200_OK)
 

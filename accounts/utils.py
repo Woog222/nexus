@@ -1,6 +1,7 @@
 from django.utils import timezone
 from django.conf import settings
 
+
 import requests, jwt, os, datetime
 from dotenv import load_dotenv
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
@@ -42,7 +43,18 @@ def exchange_apple_auth_code(auth_code: str, APPLE_DATA: dict):
     response = requests.post(APPLE_DATA.get('APPLE_TOKEN_URL'), data=data)
     if response.status_code != 200:
         raise ValueError(response.json())
-    return response.json()  
+
+    data = response.json()  
+    expected_keys = ["access_token", "token_type", "expires_in", "refresh_token", "id_token"]
+    non_existing_keys = [k for k in expected_keys if k not in data]
+
+    if len(non_existing_keys) != 0:
+        return ValueError({
+            'error' : ', '.join(non_existing_keys) + " are not included in granted response.",
+            'reponse.json()' : data
+        })
+
+    return data
 
 def generate_apple_client_secret(
         APPLE_KEY_ID:str, 
@@ -78,7 +90,8 @@ def get_apple_public_key():
 
 def validate_apple_id_token(id_token:str, client_id:str):
     """
-        validate the signature and returns decoded id_token as dictionary
+        Validate the signature and returns decoded id_token as dictionary.
+        The id_token(decoded) should include ['sub', 'email'].
     """
     apple_keys = get_apple_public_key()
     header = jwt.get_unverified_header(id_token)
@@ -89,6 +102,14 @@ def validate_apple_id_token(id_token:str, client_id:str):
     
     public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
     decoded_token = jwt.decode(id_token, public_key, algorithms=["RS256"], audience=client_id, issuer="https://appleid.apple.com")
+
+    expected_keys = ['sub', 'email']
+    non_existing_keys = [k for k in expected_keys if k not in decoded_token]
+    if len(non_existing_keys) != 0:
+        return ValueError({
+            'error' : ', '.join(non_existing_keys) + " are not included in the 'id_token'.",
+            'reponse.json()' : data
+        })
     
     return decoded_token  # Returns a dictionary of user info
 
@@ -121,8 +142,7 @@ def refresh_access_token(refresh_token:str, email:str="test@example.com"):
     """
     decoded = jwt.decode(refresh_token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
     user_id = decoded["sub"]
-    return create_access_token(user_id = user_id, email = email) # email="example@email.com")  )
-
+    return create_access_token(user_id = user_id, email = email) 
 
 def validate_access_token(token):
     """
