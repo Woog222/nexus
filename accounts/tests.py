@@ -18,9 +18,6 @@ from .views import AppleOauthView
 
 logger = logging.getLogger(__name__)
 
-from django.contrib.auth import get_user_model
-from django.test import TestCase
-
 
 class NexusUserManagerTests(TestCase):
     """Test custom user manager methods"""
@@ -29,6 +26,22 @@ class NexusUserManagerTests(TestCase):
         """Set up test data for the test cases"""
         self.apple_sub = "apple_1234567890"  # A mock Apple sub
         self.email = "testuser@example.com"
+        self.user_name = "Test User"  # New user name for tests
+        self.default_user_name = "Anonymous_user"
+
+    def test_create_user_with_default_user_name(self):
+        """Test that the default user_name is used when not provided"""
+
+        user = get_user_model().objects.create_user(
+            user_id=self.apple_sub,
+            email=self.email,
+            # Notice that we are not passing user_name here
+        )
+
+        # Check that the user_name is set to the default value
+        self.assertEqual(user.user_name, self.default_user_name)
+        self.assertEqual(user.user_id, self.apple_sub)
+        self.assertEqual(user.email, self.email)
 
     def test_create_user_with_apple_sub(self):
         """Test creating a user with an Apple sub"""
@@ -36,10 +49,12 @@ class NexusUserManagerTests(TestCase):
         user = get_user_model().objects.create_user(
             user_id=self.apple_sub,
             email=self.email,
+            user_name=self.user_name 
         )
 
         self.assertEqual(user.user_id, self.apple_sub)
         self.assertEqual(user.email, self.email)
+        self.assertEqual(user.user_name, self.user_name)  #
         self.assertTrue(user.is_active)
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
@@ -48,8 +63,34 @@ class NexusUserManagerTests(TestCase):
         self.assertIsNone(user.apple_access_token)
         self.assertIsNone(user.apple_refresh_token)
 
+        user.delete()
+        # without username
+        user = get_user_model().objects.create_user(
+            user_id=self.apple_sub,
+            email=self.email,
+        )
+        self.assertEqual(user.user_id, self.apple_sub)
+        self.assertEqual(user.email, self.email)
+        self.assertEqual(user.user_name, self.default_user_name)  
+        self.assertTrue(user.is_active)
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertIsNone(user.nexus_access_token)
+        self.assertIsNone(user.nexus_refresh_token)
+        self.assertIsNone(user.apple_access_token)
+        self.assertIsNone(user.apple_refresh_token)
+        
+
     def test_create_user_without_apple_sub(self):
         """Test creating a user without an Apple sub should raise error"""
+        with self.assertRaises(ValueError):
+            get_user_model().objects.create_user(
+                user_id=None,
+                email=self.email,
+                user_name=self.user_name  
+            )
+
+        # without username
         with self.assertRaises(ValueError):
             get_user_model().objects.create_user(
                 user_id=None,
@@ -61,10 +102,29 @@ class NexusUserManagerTests(TestCase):
         user = get_user_model().objects.create_superuser(
             user_id=self.apple_sub,
             email=self.email,
+            user_name=self.user_name  
         )
 
         self.assertEqual(user.user_id, self.apple_sub)
         self.assertEqual(user.email, self.email)
+        self.assertEqual(user.user_name, self.user_name)  
+        self.assertTrue(user.is_staff)
+        self.assertTrue(user.is_superuser)
+        self.assertIsNone(user.nexus_access_token)
+        self.assertIsNone(user.nexus_refresh_token)
+        self.assertIsNone(user.apple_access_token)
+        self.assertIsNone(user.apple_refresh_token)
+        user.delete()
+        
+        # without username
+        user = get_user_model().objects.create_superuser(
+            user_id=self.apple_sub,
+            email=self.email,
+        )
+
+        self.assertEqual(user.user_id, self.apple_sub)
+        self.assertEqual(user.email, self.email)
+        self.assertEqual(user.user_name, self.default_user_name)  
         self.assertTrue(user.is_staff)
         self.assertTrue(user.is_superuser)
         self.assertIsNone(user.nexus_access_token)
@@ -77,6 +137,7 @@ class NexusUserManagerTests(TestCase):
         user = get_user_model().objects.create_user(
             user_id=self.apple_sub,
             email=self.email,
+            user_name=self.user_name  # user_name included
         )
         self.assertFalse(user.has_usable_password())  # Should be False due to OAuth
 
@@ -85,14 +146,16 @@ class NexusUserManagerTests(TestCase):
         user = get_user_model().objects.create_user(
             user_id=self.apple_sub,
             email=self.email,
+            user_name=self.user_name  # Pass the user_name here
         )
-        self.assertEqual(str(user), self.apple_sub)
+        self.assertEqual(str(user), self.apple_sub)  # Ensure the string representation is based on user_id
 
     def test_user_update_tokens(self):
         """Test updating the user tokens"""
         user = get_user_model().objects.create_user(
             user_id=self.apple_sub,
             email=self.email,
+            user_name=self.user_name  # user_name included
         )
 
         # Update the tokens
@@ -108,6 +171,8 @@ class NexusUserManagerTests(TestCase):
         self.assertEqual(user.nexus_refresh_token, "new_nexus_refresh_token")
         self.assertEqual(user.apple_access_token, "new_apple_access_token")
         self.assertEqual(user.apple_refresh_token, "new_apple_refresh_token")
+        self.assertEqual(user.user_name, self.user_name)  # Assert that user_name remains unchanged
+
 
 
 class TrivialTest(TestCase):

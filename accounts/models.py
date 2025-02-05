@@ -26,6 +26,7 @@ class NexusUser(AbstractBaseUser, PermissionsMixin):
     """Custom user model using Apple OAuth instead of username/password"""
 
     user_id = models.CharField(max_length=255, unique=True)  # sub from Apple
+    user_name = models.CharField(max_length=255, null=False, blank=False, default="Anonymous_user")
     email = models.EmailField(null=False, blank=False)
 
     nexus_access_token = models.TextField(null=True, blank=True)  # todo
