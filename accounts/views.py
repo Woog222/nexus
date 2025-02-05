@@ -8,7 +8,7 @@ import requests, logging, jwt, os
 from datetime import timedelta
 from dotenv import load_dotenv
 
-from .utils import generate_apple_client_secret, exchange_apple_auth_code
+from .utils import generate_apple_client_secret, exchange_apple_auth_code, validate_apple_id_token
 
 
 
@@ -49,7 +49,7 @@ class AppleOauthView(APIView):
             return Response(e.args[0], status=status.HTTP_400_BAD_REQUEST)
 
         """
-            STEP 2. 
+            STEP 2. Validate and decode the id_token
             {
                 "access_token": "a7f9eb52b7b70...",
                 "token_type": "Bearer",
@@ -58,8 +58,13 @@ class AppleOauthView(APIView):
                 "id_token": "eyJraWQiOiJyczBNM2t...
             } (dict)
         """
-        access_token = token_data.get('access_token')
-        refresh_token = token_data.get('refresh_token')
+        try:
+            id_token_decoded = validate_apple_id_token(
+                id_token = token_data.get('id_token'), 
+                client_id=self.APPLE_DATA.get('APPLE_CLIENT_ID')
+            )
+        except ValueError as e:
+            return Response(e.args[0], status=status.HTTP_400_BAD_REQUEST)
 
 
 

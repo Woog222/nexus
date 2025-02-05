@@ -1,11 +1,18 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from rest_framework import status
 from rest_framework.test import APIClient
 
-import logging, requests, json
+import logging, requests, json, jwt, datetime
 
+from accounts.utils import (
+    create_access_token,
+    create_refresh_token,
+    refresh_access_token,
+    validate_access_token
+)
 from .views import AppleOauthView
 
 logger = logging.getLogger(__name__)
@@ -94,3 +101,70 @@ class AppleOauthViewTestCase(TestCase):
         # {'error' : 'code is missing'}, dict
         self.assertIn('error', response.data)
         self.assertEqual(response.data.get('error'), "code is missing")
+
+
+class JWTTokenUtilsTest(TestCase):
+    def setUp(self):
+        self.user_id = "test-user-123"
+        self.email = "test@example.com"
+        self.secret_key = settings.JWT_SECRET_KEY  
+        self.access_token = create_access_token(self.user_id, self.email)
+        self.refresh_token = create_refresh_token(self.user_id)
+
+    def test_create_access_token(self):
+        decoded = validate_access_token(self.access_token)
+        self.assertEqual(decoded["sub"], self.user_id)
+        self.assertEqual(decoded["email"], self.email)
+        self.assertEqual(decoded["iss"], "nexus")
+
+    def test_create_refresh_token(self):
+        decoded = jwt.decode(self.refresh_token, self.secret_key, algorithms=["HS256"])
+        self.assertEqual(decoded["sub"], self.user_id)
+        self.assertEqual(decoded["iss"], "nexus")
+
+    def test_refresh_access_token(self):
+        new_access_token = refresh_access_token(self.refresh_token)
+        decoded = validate_access_token(new_access_token)
+        self.assertEqual(decoded["sub"], self.user_id)
+        self.assertEqual(decoded["email"], self.email)
+        self.assertEqual(decoded["iss"], "nexus")
+
+    def test_expired_access_token(self):
+        expired_payload = {
+            "sub": self.user_id,
+            "email": self.email,
+            "exp": datetime.datetime.utcnow() - datetime.timedelta(seconds=1),
+            "iat": datetime.datetime.utcnow(),
+            "iss": "nexus"
+        }
+        expired_token = jwt.encode(expired_payload, self.secret_key, algorithm="HS256")
+
+        with self.assertRaises(jwt.ExpiredSignatureError):
+            validate_access_token(expired_token)
+
+    def test_invalid_access_token(self):
+        invalid_token = "invalid.token.string"
+
+        with self.assertRaises(jwt.InvalidTokenError):
+            validate_access_token(invalid_token)
+
+    def test_tampered_access_token(self):
+        tampered_access_token = self.access_token[:-1] + "X"  # Change last character to 'X'
+
+        with self.assertRaises(jwt.InvalidTokenError):
+            validate_access_token(tampered_access_token)
+
+    def test_tampered_refresh_token(self):
+        tampered_refresh_token = self.refresh_token[:-1] + "X"  # Change last character to 'X'
+
+        with self.assertRaises(jwt.InvalidTokenError):
+            jwt.decode(tampered_refresh_token, self.secret_key, algorithms=["HS256"])
+
+    def test_tampered_token_with_wrong_signature(self):
+        # Create a new token and tamper with the signature
+        valid_token = create_access_token(self.user_id, self.email)
+        parts = valid_token.split(".")
+        tampered_token = parts[0] + "." + parts[1] + "." + "tampered_signature"
+
+        with self.assertRaises(jwt.InvalidTokenError):
+            validate_access_token(tampered_token)
