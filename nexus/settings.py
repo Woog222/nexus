@@ -9,10 +9,10 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
-
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+load_dotenv()
 
 """
 Import app settings
@@ -33,7 +33,7 @@ from accounts.account_settings import *
 BASE_DIR = Path(__file__).resolve().parent.parent
 AUTH_USER_MODEL = 'accounts.NexusUser'
 
-load_dotenv()
+
 
 
 
@@ -69,7 +69,7 @@ INSTALLED_APPS = [
     'rest_framework',
     
     'accounts',
-    
+    'engine',
 ]
 
 MIDDLEWARE = [
@@ -210,11 +210,11 @@ LOGGING = {
             'backupCount': 5,
             'formatter': 'standard',
         },
-        'test_file': {
+        'accounts_file': {
             'level': 'INFO',
             #'filters': ['require_debug_true'],
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': BASE_DIR / 'logs/test.log',
+            'filename': BASE_DIR / 'logs/accounts.log',
             'maxBytes': 1024*1024*5,  # 5 MB
             'backupCount': 5,
             'formatter': 'standard',
@@ -240,7 +240,12 @@ LOGGING = {
             'propagate': False,
         },
         'accounts' : {
-            'handlers' : ['debug_file', 'test_file'],
+            'handlers' : ['debug_file', 'accounts_file'],
+            'level' : 'DEBUG',
+            'progatate' : False
+        },
+        'engine' : {
+            'handlers' : ['debug_file', 'engine_file'],
             'level' : 'DEBUG',
             'progatate' : False
         },

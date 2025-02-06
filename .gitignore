@@ -4,6 +4,7 @@ logs/*
 db.sqlite3
 **/private/*
 test.py
+repository/*
 
 !**/.gitkeep
 !**/readme.txt

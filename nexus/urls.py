@@ -11,5 +11,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include("accounts.urls")),
     path('', home_view, name="home_view"),
-    path('engine/', home_view, name="temp"),
+    path('engine/', include("engine.urls")),
 ]
