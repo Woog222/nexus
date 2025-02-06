@@ -14,18 +14,29 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 AUTH_USER_MODEL = 'accounts.NexusUser'
+
+
+load_dotenv()
+
+########### JWT ##########
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')  # Default for safety
+JWT_ACCESS_MIN = int(os.getenv('JWT_ACCESS_MIN', 30))  # Ensure it's int
+JWT_REFRESH_DAY = int(os.getenv('JWT_REFRESH_DAY', 30))  # Ensure it's int
+##########################
+
+
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-f13z&4z(*01gzk!v!e29c9#3z%6#sfd@^193-fkl((a&(1hq7d'
-JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
+
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True

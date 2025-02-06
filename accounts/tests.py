@@ -1,10 +1,13 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.urls import path
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from rest_framework.test import APITestCase, APIClient
 
 import logging, requests, json, jwt, datetime, copy
 
@@ -12,7 +15,7 @@ from accounts.utils import (
     create_access_token,
     create_refresh_token,
     refresh_access_token,
-    validate_access_token,
+    validate_JWTtoken
 )
 from .views import AppleOauthView
 
@@ -174,11 +177,27 @@ class NexusUserManagerTests(TestCase):
         self.assertEqual(user.user_name, self.user_name)  # Assert that user_name remains unchanged
 
 
+"""
+    Views for testing only
+"""
+@api_view(['GET'])
+def test_view(request):
+    non_existing_keys = ["access_token", "token_type",]
+    temp_data = ["expires_in", "refresh_token", "id_token"]
+    my_dict = {
+            'error' : '[' + ', '.join(non_existing_keys) + ']' + " are not included.",
+            'reponse.json()' : temp_data
+        }
+    return Response(my_dict, status = status.HTTP_200_OK)  # Send as a real HTTP response
+urlpatterns = [
+    path('test-api/', test_view),  # Temporary URL for the test
+]
 
-class TrivialTest(TestCase):
+@override_settings(ROOT_URLCONF=__name__)
+class DRFResponseTest(TestCase):
 
-    
     def setUp(self):
+        self.client = APIClient()
         self.data =     {
             "access_token": "test_access_token",
             "token_type": "Bearer",
@@ -187,6 +206,27 @@ class TrivialTest(TestCase):
             "id_token": "test_id_token",
         }
         self.expected_keys = ["access_token", "token_type", "expires_in", "refresh_token", "id_token"]
+
+    def test_response_with_dictionary(self):
+        non_existing_keys = ["access_token", "token_type",]
+        temp_data = ["expires_in", "refresh_token", "id_token"]
+        my_dict = {
+            'error' : '[' + ', '.join(non_existing_keys) + ']' + " are not included.",
+            'reponse.json()' : temp_data
+        }
+        response_before_sent= Response(my_dict)  
+        self.assertEqual(response_before_sent.data, my_dict)
+        self.assertIsInstance(response_before_sent.data, dict)
+        self.assertEqual(response_before_sent.get('Content-Type'), 'text/html; charset=utf-8')
+        
+        """
+            After response.render() called, Content-Type is set automatically (usually as application/json)
+            Check SimpleTemplateResponse and its subclass, DRF Response with their renderers
+        """
+        response_received = self.client.get('/test-api/')
+        self.assertEqual(response_received.data, my_dict)
+        self.assertIsInstance(response_received.data, dict)
+        self.assertEqual(response_received.get('Content-Type'), 'application/json')
 
     def test_key_included_as_expected(self):
 
@@ -214,8 +254,7 @@ class TrivialTest(TestCase):
             'error' : ', '.join(non_existing_keys) + " are not included.",
             'reponse.json()' : temp_data
         }
-        logger.debug(response_body)
-        logger.debug(type(response_body))
+        # how to emulate
 
         try:
             raise ValueError(response_body) # dict as arg
@@ -224,8 +263,9 @@ class TrivialTest(TestCase):
             # Assertions using Django TestCase methods
             self.assertIsInstance(response.data, dict)  # Assert that response.data is a dictionary
             self.assertEqual(response.data, response_body)  # Assert that the response data matches the response body
+            #self.assertEqual(response.get('Content-Type'), 'application/json')
 
-class AppleOauthViewTestCase(TestCase):
+class AppleOauthViewTestCase(APITestCase):
     
     def setUp(self):
         self.client = APIClient()  
@@ -238,6 +278,7 @@ class AppleOauthViewTestCase(TestCase):
             'code': 'invalid_auth_code'
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.get('Content-Type'), 'application/json')
         
     def test_callback_view_without_data(self):
         """Simulate a callback without the 'code' parameter"""
@@ -248,30 +289,30 @@ class AppleOauthViewTestCase(TestCase):
         # {'error' : 'code is missing'}, dict
         self.assertIn('error', response.data)
         self.assertEqual(response.data.get('error'), "code is missing")
+        self.assertEqual(response.get('Content-Type'), 'application/json')
 
 
 class JWTTokenUtilsTest(TestCase):
     def setUp(self):
         self.user_id = "test-user-123"
         self.email = "test@example.com"
-        self.secret_key = settings.JWT_SECRET_KEY  
         self.access_token = create_access_token(self.user_id, self.email)
         self.refresh_token = create_refresh_token(self.user_id)
 
     def test_create_access_token(self):
-        decoded = validate_access_token(self.access_token)
+        decoded = validate_JWTtoken(self.access_token)
         self.assertEqual(decoded["sub"], self.user_id)
         self.assertEqual(decoded["email"], self.email)
         self.assertEqual(decoded["iss"], "nexus")
 
     def test_create_refresh_token(self):
-        decoded = jwt.decode(self.refresh_token, self.secret_key, algorithms=["HS256"])
+        decoded = validate_JWTtoken(self.refresh_token)
         self.assertEqual(decoded["sub"], self.user_id)
         self.assertEqual(decoded["iss"], "nexus")
 
     def test_refresh_access_token(self):
         new_access_token = refresh_access_token(self.refresh_token)
-        decoded = validate_access_token(new_access_token)
+        decoded = validate_JWTtoken(new_access_token)
         self.assertEqual(decoded["sub"], self.user_id)
         self.assertEqual(decoded["email"], self.email)
         self.assertEqual(decoded["iss"], "nexus")
@@ -284,34 +325,60 @@ class JWTTokenUtilsTest(TestCase):
             "iat": datetime.datetime.utcnow(),
             "iss": "nexus"
         }
-        expired_token = jwt.encode(expired_payload, self.secret_key, algorithm="HS256")
+        expired_token = jwt.encode(expired_payload, settings.JWT_SECRET_KEY, algorithm="HS256")
 
         with self.assertRaises(jwt.ExpiredSignatureError):
-            validate_access_token(expired_token)
+            validate_JWTtoken(expired_token)
 
     def test_invalid_access_token(self):
         invalid_token = "invalid.token.string"
 
         with self.assertRaises(jwt.InvalidTokenError):
-            validate_access_token(invalid_token)
+            validate_JWTtoken(invalid_token)
 
-    def test_tampered_access_token(self):
-        tampered_access_token = self.access_token[:-1] + "X"  # Change last character to 'X'
+    def make_tampered_token(self, token:str):
+        """
+        Generate several tampered JWT tokens for testing.
+        """
+        header_base64, payload_base64, signature_base64 = token.split('.')
+        tampered_tokens = []
 
-        with self.assertRaises(jwt.InvalidTokenError):
-            validate_access_token(tampered_access_token)
+        # 1. Modify the last character in the payload
+        tampered_payload = f"{payload_base64[:-1]}{'A' if payload_base64[-1] != 'A' else 'B'}"
+        tampered_tokens.append(f"{header_base64}.{tampered_payload}.{signature_base64}")
 
-    def test_tampered_refresh_token(self):
-        tampered_refresh_token = self.refresh_token[:-1] + "X"  # Change last character to 'X'
+        # 2. Modify the last character in the header
+        tampered_header = f"{header_base64[:-1]}{'A' if header_base64[-1] != 'A' else 'B'}"
+        tampered_tokens.append(f"{tampered_header}.{payload_base64}.{signature_base64}")
 
-        with self.assertRaises(jwt.InvalidTokenError):
-            jwt.decode(tampered_refresh_token, self.secret_key, algorithms=["HS256"])
+        # 3. Modify the signature by changing the first character
+        tampered_signature = f"{'X' if signature_base64[0] != 'X' else 'Y'}{signature_base64[1:]}"
+        tampered_tokens.append(f"{header_base64}.{payload_base64}.{tampered_signature}")
 
-    def test_tampered_token_with_wrong_signature(self):
-        # Create a new token and tamper with the signature
-        valid_token = create_access_token(self.user_id, self.email)
-        parts = valid_token.split(".")
-        tampered_token = parts[0] + "." + parts[1] + "." + "tampered_signature"
+        # 4. Remove the signature completely
+        tampered_tokens.append(f"{header_base64}.{payload_base64}.")
 
-        with self.assertRaises(jwt.InvalidTokenError):
-            validate_access_token(tampered_token)
+        # 5. Change the order
+        tampered_tokens.append(f"{payload_base64}.{header_base64}.{signature_base64}")
+
+        # 6. Use an tampered signature
+        tampered_tokens.append(f"{header_base64}.{payload_base64}.tampered_signature")
+
+        return tampered_tokens
+
+
+    def test_tampered_token(self):
+
+        # access token
+        tampered_tokens = self.make_tampered_token(self.access_token)
+        for tampered_token in tampered_tokens:
+            with self.assertRaises(jwt.InvalidTokenError):
+                validate_JWTtoken(tampered_token)
+
+        # refresh token
+        tampered_tokens = self.make_tampered_token(self.refresh_token)
+        for tampered_token in tampered_tokens:
+            with self.assertRaises(jwt.InvalidTokenError):
+                validate_JWTtoken(tampered_token)
+
+        

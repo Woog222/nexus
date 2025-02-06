@@ -2,11 +2,10 @@ from django.utils import timezone
 from django.conf import settings
 
 
-import requests, jwt, os, datetime
-from dotenv import load_dotenv
+import requests, jwt, os, datetime, logging
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
-
+logger = logging.getLogger(__name__)
 
 def exchange_apple_auth_code(auth_code: str, APPLE_DATA: dict):
     """ 
@@ -50,7 +49,7 @@ def exchange_apple_auth_code(auth_code: str, APPLE_DATA: dict):
 
     if len(non_existing_keys) != 0:
         return ValueError({
-            'error' : ', '.join(non_existing_keys) + " are not included in granted response.",
+            'error' : '[' + ', '.join(non_existing_keys) + ']' + " are not included in the grant response.",
             'reponse.json()' : data
         })
 
@@ -107,7 +106,7 @@ def validate_apple_id_token(id_token:str, client_id:str):
     non_existing_keys = [k for k in expected_keys if k not in decoded_token]
     if len(non_existing_keys) != 0:
         return ValueError({
-            'error' : ', '.join(non_existing_keys) + " are not included in the 'id_token'.",
+            'error' : '[' + ', '.join(non_existing_keys) + ']' + " are not included in the 'id_token'.",
             'reponse.json()' : data
         })
     
@@ -116,24 +115,28 @@ def validate_apple_id_token(id_token:str, client_id:str):
 #######################################################
 #                    JWT Token Utils                  #
 #######################################################
-def create_access_token(user_id:str, email:str):
+def create_access_token(user_id: str, email: str):
+    now = timezone.now()
     payload = {
         "sub": user_id,
         "email": email,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=60),  # 1 hour
-        "iat": datetime.datetime.utcnow(),
+        "exp": int((now + timezone.timedelta(minutes=settings.JWT_ACCESS_MIN)).timestamp()),  # Convert to int timestamp
+        "iat": int(now.timestamp()),  # Convert to int timestamp
         "iss": "nexus"
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
 
-def create_refresh_token(user_id:str):
+def create_refresh_token(user_id: str):
+    now = timezone.now()
     payload = {
         "sub": user_id,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=30),  # 30 days
-        "iat": datetime.datetime.utcnow(),
+        "exp": int((now + timezone.timedelta(days=settings.JWT_REFRESH_DAY)).timestamp()),  # Convert to int timestamp
+        "iat": int(now.timestamp()),  # Convert to int timestamp
         "iss": "nexus"
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
+
+
 
 def refresh_access_token(refresh_token:str, email:str="test@example.com"):
     """ 
@@ -144,9 +147,9 @@ def refresh_access_token(refresh_token:str, email:str="test@example.com"):
     user_id = decoded["sub"]
     return create_access_token(user_id = user_id, email = email) 
 
-def validate_access_token(token):
+def validate_JWTtoken(token):
     """
-    Validates an access token and return its decoded one.
+    Validates an JWT token and return its decoded one.
     jwt.ExpiredSignatureError, jwt.InvalidTokenError are handled by caller.
     """
     return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])

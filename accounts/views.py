@@ -16,7 +16,7 @@ from .utils import (
     create_access_token,
     create_refresh_token,
     refresh_access_token,
-    validate_access_token,
+    validate_JWTtoken,
 )
 
 
@@ -41,32 +41,33 @@ class AppleOauthView(APIView):
     def post(self, request, *args, **kwargs):
 
         """
-            STEP 1. Validate the authorization grant code 
-            and get a token data which is like : 
+            STEP 1. Validate the authorization grant code and get a token data
+
+            Example of a token data : 
             {
                 "access_token": "a7f9eb52b7b70...",
                 "token_type": "Bearer",
                 "expires_in": 3600,
                 "refresh_token": "rf5430a91dadf...",
                 "id_token": "eyJraWQiOiJyczBNM2t...
-            } (token_data, dict)
+            } (dict)
         """
         auth_code = request.data.get("code")
         if not auth_code:
             return Response({"error": "code is missing"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # token_data is ensured to have keys commented above
+        
         try:
             token_data = exchange_apple_auth_code(auth_code=auth_code, APPLE_DATA= self.APPLE_DATA)
         except ValueError as e:
-            logger.debug(str(e))
             return Response(e.args[0], status=status.HTTP_400_BAD_REQUEST)
+        # The "token_data" is now ensured to have all keys commented above.
 
         """
             STEP 2. Validate and decode the id_token
         """
 
-        # id_token_decoded is ensured to have 'sub' and 'email'
+        
         try:
             id_token_decoded = validate_apple_id_token(
                 id_token = token_data.get('id_token'), 
@@ -74,8 +75,7 @@ class AppleOauthView(APIView):
             )
         except ValueError as e:
             return Response(e.args[0], status=status.HTTP_400_BAD_REQUEST)
-
-
+        # The "id_token"_decoded is now ensured to have 'sub' and 'email'.
         """
             STEP 3. Issue JWT tokens and update user data.
         """
