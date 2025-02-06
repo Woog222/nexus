@@ -311,8 +311,14 @@ class JWTTokenUtilsTest(TestCase):
         self.assertEqual(decoded["sub"], self.user_id)
         self.assertEqual(decoded["iss"], "nexus")
 
+    def test_refresh_access_token(self):
+        new_access_token = refresh_access_token(self.refresh_token)
+        decoded = validate_JWTtoken(new_access_token)
+        self.assertEqual(decoded["sub"], self.user_id)
+        self.assertEqual(decoded["email"], self.email)
+        self.assertEqual(decoded["iss"], "nexus")
 
-    def test_access_token_expiration(self):
+    def test_whether_access_token_exp_set_correctly(self):
         now = int(timezone.now().timestamp())
         access_token_just_created = create_access_token(self.user_id, self.email)
         decoded = jwt.decode(access_token_just_created, settings.JWT_SECRET_KEY, algorithms=["HS256"], options={"verify_signature": False})
@@ -327,8 +333,7 @@ class JWTTokenUtilsTest(TestCase):
         self.assertEqual(exp, iat + settings.JWT_ACCESS_TOKEN_TIMEDELTA.total_seconds())
         
 
-
-    def test_refresh_token_expiration(self):
+    def test_whether_refresh_token_exp_set_correctly(self):
         now = int(timezone.now().timestamp())
         refresh_token_just_created = create_refresh_token(self.user_id)
         decoded = jwt.decode(refresh_token_just_created, settings.JWT_SECRET_KEY, algorithms=["HS256"], options={"verify_signature": False})
@@ -343,19 +348,13 @@ class JWTTokenUtilsTest(TestCase):
         self.assertEqual(exp, iat + settings.JWT_REFRESH_TOKEN_TIMEDELTA.total_seconds())
 
 
-    def test_refresh_access_token(self):
-        new_access_token = refresh_access_token(self.refresh_token)
-        decoded = validate_JWTtoken(new_access_token)
-        self.assertEqual(decoded["sub"], self.user_id)
-        self.assertEqual(decoded["email"], self.email)
-        self.assertEqual(decoded["iss"], "nexus")
-
     def test_expired_access_token(self):
+        now_datetime = timezone.now()
         expired_payload = {
             "sub": self.user_id,
             "email": self.email,
-            "exp": datetime.datetime.utcnow() - datetime.timedelta(seconds=1),
-            "iat": datetime.datetime.utcnow(),
+            "exp": int( (now_datetime - datetime.timedelta(seconds=1)).timestamp() ),
+            "iat": int( now_datetime.timestamp() ),
             "iss": "nexus"
         }
         expired_token = jwt.encode(expired_payload, settings.JWT_SECRET_KEY, algorithm="HS256")
@@ -363,11 +362,18 @@ class JWTTokenUtilsTest(TestCase):
         with self.assertRaises(jwt.ExpiredSignatureError):
             validate_JWTtoken(expired_token)
 
-    def test_invalid_access_token(self):
-        invalid_token = "invalid.token.string"
+    def test_expired_refresh_token(self):
+        now_datetime = timezone.now()
+        expired_payload = {
+            "sub": self.user_id,
+            "exp": int( (now_datetime - datetime.timedelta(seconds=1)).timestamp() ),
+            "iat": int( now_datetime.timestamp() ),
+            "iss": "nexus"
+        }
+        expired_token = jwt.encode(expired_payload, settings.JWT_SECRET_KEY, algorithm="HS256")
 
-        with self.assertRaises(jwt.InvalidTokenError):
-            validate_JWTtoken(invalid_token)
+        with self.assertRaises(jwt.ExpiredSignatureError):
+            validate_JWTtoken(expired_token)
 
     def make_tampered_token(self, token:str):
         """
@@ -397,11 +403,13 @@ class JWTTokenUtilsTest(TestCase):
         # 6. Use an tampered signature
         tampered_tokens.append(f"{header_base64}.{payload_base64}.tampered_signature")
 
+        # 7. Use a totally invalid token
+        tampered_tokens.append('invalid.token.string')
+
         return tampered_tokens
 
 
-    def test_tampered_token(self):
-
+    def test_tampered_tokens(self):
         # access token
         tampered_tokens = self.make_tampered_token(self.access_token)
         for tampered_token in tampered_tokens:
