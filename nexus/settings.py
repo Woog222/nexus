@@ -14,18 +14,28 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
+"""
+Import app settings
+"""
+from accounts.account_settings import *
+
+
+
+
+
+
+
+
+
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 AUTH_USER_MODEL = 'accounts.NexusUser'
 
-
 load_dotenv()
 
-########### JWT ##########
-JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')  # Default for safety
-JWT_ACCESS_MIN = int(os.getenv('JWT_ACCESS_MIN', 30))  # Ensure it's int
-JWT_REFRESH_DAY = int(os.getenv('JWT_REFRESH_DAY', 30))  # Ensure it's int
-##########################
+
 
 
 

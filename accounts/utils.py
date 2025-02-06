@@ -112,9 +112,9 @@ def validate_apple_id_token(id_token:str, client_id:str):
     
     return decoded_token  # Returns a dictionary of user info
 
-#######################################################
-#                    JWT Token Utils                  #
-#######################################################
+########################################################
+#                    JWT Token Utils                   #
+########################################################
 def create_access_token(user_id: str, email: str):
     now = timezone.now()
     payload = {

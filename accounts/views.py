@@ -26,16 +26,14 @@ logger = logging.getLogger(__name__)
 class AppleOauthView(APIView):
     """ Handles Apple OAuth login callback and token exchange. """
 
-    with open("accounts/private/apple_authkey.p8", "r") as f:
-        APPLE_PRIVATE_KEY = f.read()
     APPLE_DATA = {
-        'APPLE_CLIENT_ID' : os.getenv("APPLE_CLIENT_ID"),
-        'APPLE_KEY_ID' : os.getenv("APPLE_KEY_ID"),
-        'APPLE_TEAM_ID': os.getenv("APPLE_TEAM_ID"),
-        'APPLE_REDIRECT_URI' : "https://www.cvan.shop/accounts/oauth/apple/callback/",
-        'APPLE_PUBLIC_KEY_URL' : "https://appleid.apple.com/auth/keys",
-        'APPLE_TOKEN_URL' : "https://appleid.apple.com/auth/token",
-        'APPLE_PRIVATE_KEY' : APPLE_PRIVATE_KEY,
+        'APPLE_CLIENT_ID' : settings.APPLE_CLIENT_ID,
+        'APPLE_KEY_ID' : settings.APPLE_KEY_ID,
+        'APPLE_TEAM_ID': settings.APPLE_TEAM_ID,
+        'APPLE_REDIRECT_URI' : settings.APPLE_REDIRECT_URI,
+        'APPLE_PUBLIC_KEY_URL' : settings.APPLE_PUBLIC_KEY_URL,
+        'APPLE_TOKEN_URL' : settings.APPLE_TOKEN_URL,
+        'APPLE_PRIVATE_KEY' : settings.APPLE_PRIVATE_KEY,
     }
 
     def post(self, request, *args, **kwargs):
@@ -79,7 +77,7 @@ class AppleOauthView(APIView):
         """
             STEP 3. Issue JWT tokens and update user data.
         """
-        user_id = id_token_decoded.get("sub")
+        user_id = f"{settings.APPLE_USER_ID_PREFIX}{id_token_decoded.get("sub")}"
         email = id_token_decoded.get("email")
         apple_access_token = token_data.get("access_token")
         apple_refresh_token = token_data.get("refresh_token")
@@ -103,5 +101,5 @@ class AppleOauthView(APIView):
             'access_token' : nexus_access_token,
             'refresh_token' : nexus_refresh_token,
             'created' : 'yes' if created else 'no'
-        }, status = HTTP_200_OK)
+        }, status = status.HTTP_200_OK)
 
