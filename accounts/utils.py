@@ -120,7 +120,7 @@ def create_access_token(user_id: str, email: str):
     payload = {
         "sub": user_id,
         "email": email,
-        "exp": int((now + timezone.timedelta(minutes=settings.JWT_ACCESS_MIN)).timestamp()),  # Convert to int timestamp
+        "exp": int((now + settings.JWT_ACCESS_TOKEN_TIMEDELTA).timestamp()),  # Convert to int timestamp
         "iat": int(now.timestamp()),  # Convert to int timestamp
         "iss": "nexus"
     }
@@ -130,7 +130,7 @@ def create_refresh_token(user_id: str):
     now = timezone.now()
     payload = {
         "sub": user_id,
-        "exp": int((now + timezone.timedelta(days=settings.JWT_REFRESH_DAY)).timestamp()),  # Convert to int timestamp
+        "exp": int((now + settings.JWT_REFRESH_TOKEN_TIMEDELTA).timestamp()),  # Convert to int timestamp
         "iat": int(now.timestamp()),  # Convert to int timestamp
         "iss": "nexus"
     }

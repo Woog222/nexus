@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import datetime
 
 
 load_dotenv()
@@ -8,9 +9,8 @@ load_dotenv()
 JWT
 """
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')  # Default for safety
-JWT_ACCESS_MIN = int(os.getenv('JWT_ACCESS_MIN', 30))  # Ensure it's int
-JWT_REFRESH_DAY = int(os.getenv('JWT_REFRESH_DAY', 30))  # Ensure it's int
-
+JWT_ACCESS_TOKEN_TIMEDELTA= datetime.timedelta(minutes=30)
+JWT_REFRESH_TOKEN_TIMEDELTA = datetime.timedelta(days=30)
 
 """
 APPLE 

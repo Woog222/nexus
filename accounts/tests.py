@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.urls import path
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework.response import Response
@@ -309,6 +310,38 @@ class JWTTokenUtilsTest(TestCase):
         decoded = validate_JWTtoken(self.refresh_token)
         self.assertEqual(decoded["sub"], self.user_id)
         self.assertEqual(decoded["iss"], "nexus")
+
+
+    def test_access_token_expiration(self):
+        now = int(timezone.now().timestamp())
+        access_token_just_created = create_access_token(self.user_id, self.email)
+        decoded = jwt.decode(access_token_just_created, settings.JWT_SECRET_KEY, algorithms=["HS256"], options={"verify_signature": False})
+        
+        expected_exp = now + settings.JWT_ACCESS_TOKEN_TIMEDELTA.total_seconds()
+        exp = decoded.get("exp")
+        iat = decoded.get("iat")
+        
+        # Ensure expiration is correctly set
+        self.assertAlmostEqual(exp, expected_exp, delta=5)  #
+        self.assertAlmostEqual(iat, now, delta=5)
+        self.assertEqual(exp, iat + settings.JWT_ACCESS_TOKEN_TIMEDELTA.total_seconds())
+        
+
+
+    def test_refresh_token_expiration(self):
+        now = int(timezone.now().timestamp())
+        refresh_token_just_created = create_refresh_token(self.user_id)
+        decoded = jwt.decode(refresh_token_just_created, settings.JWT_SECRET_KEY, algorithms=["HS256"], options={"verify_signature": False})
+        
+        expected_exp = now + settings.JWT_REFRESH_TOKEN_TIMEDELTA.total_seconds()
+        exp = decoded.get("exp")
+        iat = decoded.get("iat")
+        
+        # Ensure expiration is correctly set
+        self.assertAlmostEqual(exp, expected_exp, delta=5)  #
+        self.assertAlmostEqual(iat, now, delta=5)
+        self.assertEqual(exp, iat + settings.JWT_REFRESH_TOKEN_TIMEDELTA.total_seconds())
+
 
     def test_refresh_access_token(self):
         new_access_token = refresh_access_token(self.refresh_token)
