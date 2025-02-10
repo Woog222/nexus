@@ -1,5 +1,4 @@
 # file/views.py
-import os, logging
 from django.conf import settings
 from django.http import HttpResponse, Http404
 from django.http import FileResponse, JsonResponse
@@ -7,9 +6,11 @@ from rest_framework.decorators import api_view
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
+
+import os, logging, base64
 
 from .serializers import NexusFileSerializer
 from .models import NexusFile
@@ -20,61 +21,63 @@ class FileUploadAPIView(APIView):
     """
     API view for uploading files.
     """
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [JSONParser]
 
     def post(self, request, *args, **kwargs):
         """
-        Upload a file to the repository and save it.
-
+        Upload a file to the repository and save it to the DB.
         { 
             "name" : "toy_drummer",
             "file_extension" : "usdz",
-            "file_content" : binary raw data
+            "file_content" : base64_encoded file content
         }
         """
-        # Extract file and other data from request
         logger.debug("POST request received for FileUploadView.")
+        logger.debug(request.headers); logger.debug(request.data)
+        
+
         name = request.data.get('name')
         file_extension = request.data.get('file_extension')
-        file_content = request.FILES.get('file_content')
+        file_content = request.data.get('file_content')
+        logger.debug(f"{name}.{file_extension} : {file_content[:10]}")
 
         if not name or not file_extension or not file_content:
-            logger.debug("Missing required parameters(name, file_extension, file_content)")
+            logger.info("Missing required parameters(name, file_extension, file_content)")
             return Response(
                 {"detail": "Missing required parameters(name, file_extension, file_content)"}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            # Check if a record with the same name already exists
-            if NexusFile.objects.filter(name=name).exists():
-                logger.info(f"Record with name '{name}' already exists.")
-                return Response(
-                    {"detail": f"A record with name '{name}' already exists, violating uniqueness constraint."}, 
-                    status=status.HTTP_409_CONFLICT
-                )
+        
+        # Check if a record with the same name already exists
+        if NexusFile.objects.filter(name=name).exists():
+            logger.debug(f"Record with name '{name}.{file_extension}' already exists.")
+            return Response(
+                {"error": f"A record with name '{name}.{file_extension}' already exists, violating uniqueness constraint."}, 
+                status=status.HTTP_409_CONFLICT
+            )
 
-            # Construct the file path
+        try:
             file_path = os.path.join(settings.BASE_DIR, 'repository', f"{name}.{file_extension}")
 
             # Save the file
+            # Decode Base64 back to file
             with open(file_path, 'wb') as f:
-                for chunk in file_content.chunks():
-                    f.write(chunk)
+                f.write(base64.b64decode(file_content))
 
             # Save the metadata to the database
             a = NexusFile(name=name, file_extension=file_extension)
             a.save()
-
+            logger.info(f"File {name}.{file_extension} uploaded successfully.")
             return Response(
                 {"message": f"File {name}.{file_extension} uploaded successfully."},
                 status=status.HTTP_201_CREATED
             )
         except Exception as e:
-            logger.debug(f"{str(e)}")
+            logger.info(f"{str(e)}")
             return Response(
                 {"error": f"{str(e)}"}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_400_BAD_REQUEST
             )
 
 
