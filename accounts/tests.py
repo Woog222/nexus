@@ -19,6 +19,8 @@ from accounts.utils import (
     validate_JWTtoken
 )
 from .views import AppleOauthView
+from .models import NexusUser
+from .serializers import NexusUserSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ class NexusUserManagerTests(TestCase):
 
     def setUp(self):
         """Set up test data for the test cases"""
-        self.apple_sub = "apple_1234567890"  # A mock Apple sub
+        self.user_id = "apple_1234567890"  # A mock Apple sub
         self.email = "testuser@example.com"
         self.user_name = "Test User"  # New user name for tests
         self.default_user_name = "Anonymous_user"
@@ -37,55 +39,51 @@ class NexusUserManagerTests(TestCase):
         """Test that the default user_name is used when not provided"""
 
         user = get_user_model().objects.create_user(
-            user_id=self.apple_sub,
+            user_id=self.user_id,
             email=self.email,
             # Notice that we are not passing user_name here
         )
 
         # Check that the user_name is set to the default value
         self.assertEqual(user.user_name, self.default_user_name)
-        self.assertEqual(user.user_id, self.apple_sub)
+        self.assertEqual(user.user_id, self.user_id)
         self.assertEqual(user.email, self.email)
 
-    def test_create_user_with_apple_sub(self):
+    def test_create_user_with_user_id(self):
         """Test creating a user with an Apple sub"""
 
         user = get_user_model().objects.create_user(
-            user_id=self.apple_sub,
+            user_id=self.user_id,
             email=self.email,
             user_name=self.user_name 
         )
 
-        self.assertEqual(user.user_id, self.apple_sub)
+        self.assertEqual(user.user_id, self.user_id)
         self.assertEqual(user.email, self.email)
         self.assertEqual(user.user_name, self.user_name)  #
         self.assertTrue(user.is_active)
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
-        self.assertIsNone(user.nexus_access_token)
-        self.assertIsNone(user.nexus_refresh_token)
         self.assertIsNone(user.apple_access_token)
         self.assertIsNone(user.apple_refresh_token)
 
         user.delete()
         # without username
         user = get_user_model().objects.create_user(
-            user_id=self.apple_sub,
+            user_id=self.user_id,
             email=self.email,
         )
-        self.assertEqual(user.user_id, self.apple_sub)
+        self.assertEqual(user.user_id, self.user_id)
         self.assertEqual(user.email, self.email)
         self.assertEqual(user.user_name, self.default_user_name)  
         self.assertTrue(user.is_active)
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
-        self.assertIsNone(user.nexus_access_token)
-        self.assertIsNone(user.nexus_refresh_token)
         self.assertIsNone(user.apple_access_token)
         self.assertIsNone(user.apple_refresh_token)
         
 
-    def test_create_user_without_apple_sub(self):
+    def test_create_user_without_user_id(self):
         """Test creating a user without an Apple sub should raise error"""
         with self.assertRaises(ValueError):
             get_user_model().objects.create_user(
@@ -104,42 +102,38 @@ class NexusUserManagerTests(TestCase):
     def test_create_superuser(self):
         """Test creating a superuser"""
         user = get_user_model().objects.create_superuser(
-            user_id=self.apple_sub,
+            user_id=self.user_id,
             email=self.email,
             user_name=self.user_name  
         )
 
-        self.assertEqual(user.user_id, self.apple_sub)
+        self.assertEqual(user.user_id, self.user_id)
         self.assertEqual(user.email, self.email)
         self.assertEqual(user.user_name, self.user_name)  
         self.assertTrue(user.is_staff)
         self.assertTrue(user.is_superuser)
-        self.assertIsNone(user.nexus_access_token)
-        self.assertIsNone(user.nexus_refresh_token)
         self.assertIsNone(user.apple_access_token)
         self.assertIsNone(user.apple_refresh_token)
         user.delete()
         
         # without username
         user = get_user_model().objects.create_superuser(
-            user_id=self.apple_sub,
+            user_id=self.user_id,
             email=self.email,
         )
 
-        self.assertEqual(user.user_id, self.apple_sub)
+        self.assertEqual(user.user_id, self.user_id)
         self.assertEqual(user.email, self.email)
         self.assertEqual(user.user_name, self.default_user_name)  
         self.assertTrue(user.is_staff)
         self.assertTrue(user.is_superuser)
-        self.assertIsNone(user.nexus_access_token)
-        self.assertIsNone(user.nexus_refresh_token)
         self.assertIsNone(user.apple_access_token)
         self.assertIsNone(user.apple_refresh_token)
 
     def test_create_user_with_unusable_password(self):
         """Test that a user created via Apple OAuth has an unusable password"""
         user = get_user_model().objects.create_user(
-            user_id=self.apple_sub,
+            user_id=self.user_id,
             email=self.email,
             user_name=self.user_name  # user_name included
         )
@@ -148,34 +142,120 @@ class NexusUserManagerTests(TestCase):
     def test_str_method(self):
         """Test the __str__ method of the NexusUser"""
         user = get_user_model().objects.create_user(
-            user_id=self.apple_sub,
+            user_id=self.user_id,
             email=self.email,
             user_name=self.user_name  # Pass the user_name here
         )
-        self.assertEqual(str(user), self.apple_sub)  # Ensure the string representation is based on user_id
+        self.assertEqual(str(user), self.user_id)  # Ensure the string representation is based on user_id
 
     def test_user_update_tokens(self):
         """Test updating the user tokens"""
         user = get_user_model().objects.create_user(
-            user_id=self.apple_sub,
+            user_id=self.user_id,
             email=self.email,
             user_name=self.user_name  # user_name included
         )
 
         # Update the tokens
-        user.nexus_access_token = "new_nexus_access_token"
-        user.nexus_refresh_token = "new_nexus_refresh_token"
         user.apple_access_token = "new_apple_access_token"
         user.apple_refresh_token = "new_apple_refresh_token"
         user.save()
-
-        user.refresh_from_db()  # Ensure the database values are updated
-
-        self.assertEqual(user.nexus_access_token, "new_nexus_access_token")
-        self.assertEqual(user.nexus_refresh_token, "new_nexus_refresh_token")
+        user.refresh_from_db() 
         self.assertEqual(user.apple_access_token, "new_apple_access_token")
         self.assertEqual(user.apple_refresh_token, "new_apple_refresh_token")
-        self.assertEqual(user.user_name, self.user_name)  # Assert that user_name remains unchanged
+        self.assertEqual(user.user_name, self.user_name)  
+
+
+
+class NexusUserAPITestCase(APITestCase):
+    """ Test User API """
+
+    def setUp(self):
+        """Set up test data before each test"""
+        self.user_id = 'test-user-123'
+        self.email = 'test@example.com'
+
+        self.user = NexusUser.objects.create(user_id=self.user_id, email=self.email)
+        self.access_token = create_access_token(self.user_id, self.email)
+        
+    def test_get_user_success(self):
+        """ Test retrieving user information with a valid access token"""
+
+        response = self.client.get(
+            f"/accounts/{self.user_id}/", 
+            HTTP_AUTHORIZATION=f"Bearer {self.access_token}"  # Send the token in header
+        )
+
+        expected_data = NexusUserSerializer(self.user).data
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertDictEqual(response.json(), expected_data)
+
+    def test_missing_access_token(self):
+        """ Test request with no access token"""
+        response = self.client.get(f"/accounts/{self.user_id}/"
+)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertDictEqual(response.json(), {'error': 'Access token is missing'})
+
+    def test_invalid_access_token(self):
+        """ Test request with an invalid access token"""
+        response = self.client.get(
+            f"/accounts/{self.user_id}/", 
+            HTTP_AUTHORIZATION='Bearer invalid_token'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.json(), {'error': 'Invalid token'})
+
+    def test_expired_access_token(self):
+        """ Test request with an expired access token"""
+        expired_token = jwt.encode(
+            {'user_id': self.user_id, 'exp': 0},  # Expired timestamp
+            settings.JWT_SECRET_KEY,
+            algorithm='HS256'
+        )
+
+        response = self.client.get(
+            f"/accounts/{self.user_id}/", 
+            HTTP_AUTHORIZATION=f"Bearer {expired_token}"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.json(), {'error': 'Token has expired'})
+
+    def test_valid_token_with_non_existing_user(self):
+        """ Test retrieving user information for a non-existent user"""
+        non_existing_user_id = "asdfasdf"
+        valid_token_anyway = create_access_token(non_existing_user_id, 'other@example.com')
+
+        response = self.client.get(
+            f"/accounts/{non_existing_user_id}/",
+            HTTP_AUTHORIZATION=f"Bearer {valid_token_anyway}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertDictEqual(response.json(), {'error': 'User not found'})
+
+    def test_valid_token_for_another_user(self):
+        """ Test request where valid token belongs to a different user"""
+        another_token = create_access_token('another-user', 'other@example.com')
+
+        response = self.client.get(
+            f"/accounts/{self.user_id}/",
+            HTTP_AUTHORIZATION=f"Bearer {another_token}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertDictEqual(response.json(), {'error': 'Invalid token for this user'})
+
+
+
+
+
+
+
+
+
 
 
 """
@@ -302,19 +382,23 @@ class JWTTokenUtilsTest(TestCase):
 
     def test_create_access_token(self):
         decoded = validate_JWTtoken(self.access_token)
-        self.assertEqual(decoded["sub"], self.user_id)
+        self.assertEqual(decoded["user_id"], self.user_id)
         self.assertEqual(decoded["email"], self.email)
         self.assertEqual(decoded["iss"], "nexus")
 
     def test_create_refresh_token(self):
         decoded = validate_JWTtoken(self.refresh_token)
-        self.assertEqual(decoded["sub"], self.user_id)
+        self.assertEqual(decoded["user_id"], self.user_id)
         self.assertEqual(decoded["iss"], "nexus")
 
     def test_refresh_access_token(self):
-        new_access_token = refresh_access_token(self.refresh_token)
+
+        decoded = validate_JWTtoken(self.refresh_token)
+        self.assertEqual(decoded['user_id'], self.user_id)
+
+        new_access_token = create_access_token(user_id=decoded['user_id'], email=self.email)
         decoded = validate_JWTtoken(new_access_token)
-        self.assertEqual(decoded["sub"], self.user_id)
+        self.assertEqual(decoded["user_id"], self.user_id)
         self.assertEqual(decoded["email"], self.email)
         self.assertEqual(decoded["iss"], "nexus")
 
@@ -351,7 +435,7 @@ class JWTTokenUtilsTest(TestCase):
     def test_expired_access_token(self):
         now_datetime = timezone.now()
         expired_payload = {
-            "sub": self.user_id,
+            "user_id": self.user_id,
             "email": self.email,
             "exp": int( (now_datetime - datetime.timedelta(seconds=1)).timestamp() ),
             "iat": int( now_datetime.timestamp() ),
@@ -365,7 +449,7 @@ class JWTTokenUtilsTest(TestCase):
     def test_expired_refresh_token(self):
         now_datetime = timezone.now()
         expired_payload = {
-            "sub": self.user_id,
+            "user_id": self.user_id,
             "exp": int( (now_datetime - datetime.timedelta(seconds=1)).timestamp() ),
             "iat": int( now_datetime.timestamp() ),
             "iss": "nexus"
@@ -422,4 +506,52 @@ class JWTTokenUtilsTest(TestCase):
             with self.assertRaises(jwt.InvalidTokenError):
                 validate_JWTtoken(tampered_token)
 
+
+class JWTAuthorizationAPITestCase(APITestCase):
+    def setUp(self):
+        self.user_id = "test-user-123"
+        self.email = "test@example.com"
         
+        # Create the user in the database
+        self.user = NexusUser(user_id=self.user_id, email=self.email)
+        self.user.save()
+        self.assertTrue(NexusUser.objects.filter(user_id=self.user_id).exists())
+        
+        # Create a refresh token using the user data
+        self.refresh_token = create_refresh_token(self.user_id)
+        self.url = "/accounts/auth/refresh/"
+
+    def test_refresh_token_success(self):
+        """Test refreshing access token with a valid refresh token"""
+        response = self.client.post(self.url, {"refresh_token": self.refresh_token}, format="json")
+
+        logger.debug(response.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access_token", response.json())
+
+    def test_missing_refresh_token(self):
+        """Test request with no refresh token"""
+        response = self.client.post(self.url, {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertDictEqual(response.data, { 'error': 'Refresh token is required' })
+
+    def test_invalid_refresh_token(self):
+        """Test refreshing with an invalid refresh token"""
+        response = self.client.post(self.url, {"refresh_token": "invalid_token"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertDictEqual(response.data, {'error': 'Invalid refresh token'})
+
+    def test_expired_refresh_token(self):
+        now_datetime = timezone.now()
+        expired_payload = {
+            "user_id": self.user_id,
+            "exp": int( (now_datetime - datetime.timedelta(seconds=1)).timestamp() ),
+            "iat": int( now_datetime.timestamp() ),
+            "iss": "nexus"
+        }
+        expired_token = jwt.encode(expired_payload, settings.JWT_SECRET_KEY, algorithm="HS256")
+        response = self.client.post(self.url, {"refresh_token" : expired_token}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertDictEqual(response.data, {'error': 'Refresh token has expired'})
+

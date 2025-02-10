@@ -1,9 +1,10 @@
 from django.utils import timezone
 from django.conf import settings
 
-
 import requests, jwt, os, datetime, logging
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
+
+from .models import NexusUser
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ def exchange_apple_auth_code(auth_code: str, APPLE_DATA: dict):
     non_existing_keys = [k for k in expected_keys if k not in data]
 
     if len(non_existing_keys) != 0:
-        return ValueError({
+        raise ValueError({
             'error' : '[' + ', '.join(non_existing_keys) + ']' + " are not included in the grant response.",
             'reponse.json()' : data
         })
@@ -105,7 +106,7 @@ def validate_apple_id_token(id_token:str, client_id:str):
     expected_keys = ['sub', 'email']
     non_existing_keys = [k for k in expected_keys if k not in decoded_token]
     if len(non_existing_keys) != 0:
-        return ValueError({
+        raise ValueError({
             'error' : '[' + ', '.join(non_existing_keys) + ']' + " are not included in the 'id_token'.",
             'reponse.json()' : data
         })
@@ -118,10 +119,10 @@ def validate_apple_id_token(id_token:str, client_id:str):
 def create_access_token(user_id: str, email: str):
     now = timezone.now()
     payload = {
-        "sub": user_id,
+        "user_id": user_id,
         "email": email,
-        "exp": int((now + settings.JWT_ACCESS_TOKEN_TIMEDELTA).timestamp()),  # Convert to int timestamp
-        "iat": int(now.timestamp()),  # Convert to int timestamp
+        "exp": int((now + settings.JWT_ACCESS_TOKEN_TIMEDELTA).timestamp()), 
+        "iat": int(now.timestamp()),
         "iss": "nexus"
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
@@ -129,27 +130,30 @@ def create_access_token(user_id: str, email: str):
 def create_refresh_token(user_id: str):
     now = timezone.now()
     payload = {
-        "sub": user_id,
-        "exp": int((now + settings.JWT_REFRESH_TOKEN_TIMEDELTA).timestamp()),  # Convert to int timestamp
-        "iat": int(now.timestamp()),  # Convert to int timestamp
+        "user_id": user_id,
+        "exp": int((now + settings.JWT_REFRESH_TOKEN_TIMEDELTA).timestamp()),  
+        "iat": int(now.timestamp()),
         "iss": "nexus"
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
 
 
-
-def refresh_access_token(refresh_token:str, email:str="test@example.com"):
+def refresh_access_token(refresh_token: str):
     """ 
-    Returns a new access token.
+    Returns a new access_token
     jwt.ExpiredSignatureError, jwt.InvalidTokenError are handled by caller.
     """
-    decoded = jwt.decode(refresh_token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
-    user_id = decoded["sub"]
-    return create_access_token(user_id = user_id, email = email) 
+    decoded = validate_JWTtoken(refresh_token)
+    user_id = decoded['user_id']
+    user = NexusUser.objects.get(user_id=user_id)  # Use the correct ORM query
+    email = user.email  # Access email from the user object
+    return create_access_token(user_id=user_id, email=email)
+    
+
 
 def validate_JWTtoken(token):
     """
-    Validates an JWT token and return its decoded one.
+    Validates a JWT Token.
     jwt.ExpiredSignatureError, jwt.InvalidTokenError are handled by caller.
     """
     return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])

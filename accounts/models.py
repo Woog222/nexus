@@ -29,11 +29,8 @@ class NexusUser(AbstractBaseUser, PermissionsMixin):
     user_name = models.CharField(max_length=255, null=False, blank=False, default="Anonymous_user")
     email = models.EmailField(null=False, blank=False)
 
-    nexus_access_token = models.TextField(null=True, blank=True)  # todo
-    nexus_refresh_token = models.TextField(null=True, blank=True)  # todo
     apple_access_token = models.TextField(null=True, blank=True)  # todo
     apple_refresh_token = models.TextField(null=True, blank=True)  # todo
-
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)  # Required for Django admin
