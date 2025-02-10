@@ -193,8 +193,7 @@ class NexusUserAPITestCase(APITestCase):
 
     def test_missing_access_token(self):
         """ Test request with no access token"""
-        response = self.client.get(f"/accounts/{self.user_id}/"
-)
+        response = self.client.get(f"/accounts/{self.user_id}/")
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertDictEqual(response.json(), {'error': 'Access token is missing'})

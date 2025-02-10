@@ -76,7 +76,7 @@ class AppleOauthView(APIView):
         """
             STEP 3. Issue JWT tokens and update user data.
         """
-        user_id = f"{settings.APPLE_USER_ID_PREFIX}{id_token_decoded.get("sub")}"
+        user_id = f"{settings.APPLE_USER_ID_PREFIX}_{id_token_decoded.get("sub")}"
         email = id_token_decoded.get("email")
         apple_access_token = token_data.get("access_token")
         apple_refresh_token = token_data.get("refresh_token")
@@ -94,7 +94,6 @@ class AppleOauthView(APIView):
 
         return Response({
             'user_id' : user_id,
-            'email' : email,
             'access_token' : nexus_access_token,
             'refresh_token' : nexus_refresh_token,
             'created' : 'yes' if created else 'no'
@@ -107,10 +106,6 @@ class NexusUserAPIView(APIView):
     """
 
     def get(self, request, user_id):
-
-
-        logger.debug(f"({user_id}) {request.headers}")
-
         """
         STEP 1. Validate the access_token
         """
@@ -143,6 +138,9 @@ class NexusUserAPIView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except NexusUser.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request):
+        # update user id
 
 
 

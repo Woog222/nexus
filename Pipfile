@@ -10,6 +10,7 @@ python-dotenv = "*"
 djangorestframework = "*"
 uwsgi = "*"
 pyjwt = "*"
+djangorestframework-simplejwt = "*"
 
 [dev-packages]
 
