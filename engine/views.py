@@ -3,13 +3,10 @@ from django.conf import settings
 from django.http import HttpResponse, Http404
 from django.http import FileResponse, JsonResponse
 from rest_framework.decorators import api_view
-from rest_framework.views import APIView
-from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.parsers import JSONParser
-from rest_framework import status
+from rest_framework import status, permissions, exceptions, generics, views
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny, IsAuthenticated
 
 import os, logging, base64
 
@@ -18,12 +15,12 @@ from .models import NexusFile
 
 logger = logging.getLogger(__name__)
 
-class FileUploadAPIView(APIView):
+class NexusFileUploadAPIView(views.APIView):
     """
     API view for uploading files.
     """
     parser_classes = [JSONParser]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         """
@@ -83,11 +80,11 @@ class FileUploadAPIView(APIView):
             )
 
 
-class FileDownloadAPIView(APIView):
+class NexusFileDownloadAPIView(views.APIView):
     """
     API view for downloading files.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [permissions.AllowAny]
     def get(self, request, file_name, *args, **kwargs):
         """
         Download the requested file from the repository using FileResponse.
@@ -115,17 +112,43 @@ class FilePagination(PageNumberPagination):
     page_size_query_param = 'page_size'  # Allows clients to set a custom page size
     max_page_size = 100  # Maximum items per page
 
-class FileListAPIView(ListAPIView):
-    permission_classes = [AllowAny]
+class NexusFileListAPIView(generics.ListAPIView):
+    permission_classes = [permissions.AllowAny]
     queryset = NexusFile.objects.all()
     serializer_class = NexusFileSerializer
     pagination_class = FilePagination
-    
-    
+
+
+
+
+class NexusFileDeleteAPIView(generics.DestroyAPIView):
+    permission_classes = [permissions.IsAuthenticated]  
+
+    def get_object(self):
+        """Retrieve the file by name and ensure the user owns it."""
+        file_name = self.kwargs.get("file_name")  
+        user = self.request.user  # Authenticated user
+
+        try:
+            obj = NexusFile.objects.get(name=file_name)  
+        except NexusFile.DoesNotExist:
+            raise exceptions.NotFound("File not found.")
+        
+        if obj.owner != user:
+            raise exceptions.PermissionDenied("You do not have permission to delete this file.")
+
+        return obj
+
+
+    def delete(self, request, *args, **kwargs):
+        """Handle DELETE request for NexusFile."""
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({"message": f"File '{instance.name}' deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
 @api_view(['DELETE'])
 def reset_ultimately(request):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
     try:
         # Delete all NexusFile objects from the database
         NexusFile.objects.all().delete()
@@ -157,7 +180,7 @@ def reset_ultimately(request):
 @api_view(['PUT'])
 def db_update(request):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
     
     try:
         # Delete all NexusFile objects from the database
