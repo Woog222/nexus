@@ -1,10 +1,13 @@
 # engine/tests.py
 from django.urls import reverse
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import NexusFile
+from accounts.models import NexusUser
 
 import os, logging, base64
 
@@ -24,28 +27,31 @@ class FileUploadDownloadTestCase(APITestCase):
         self.test_file_extension = "usdz"
         self.test_file_uploaded_path = os.path.join(settings.BASE_DIR, 'repository', 'test_toy_drummer.usdz')
 
+         
+        self.user = get_user_model().objects.create_user(
+            user_id="test_user_id",
+            email="test_email@gmail.com",
+            user_name= "test_user_name" 
+        )
+        self.user.save()
+
+        refresh = RefreshToken.for_user(self.user)
+        self.access_token = str(refresh.access_token)
+        self.refresh_token = str(refresh)
+
+
     def test_urls(self):
-        """
-            Test url reverse functionality.
-        """
         self.assertEqual(self.upload_url, "/engine/upload/")
         self.assertEqual(self.download_url, "/engine/download/test_toy_drummer.usdz/")
         self.assertEqual(self.list_api_url, "/engine/")
 
-    def test_base64(self):
-        """
-        Test basic base64 encoding/decoding functionality
-        """
+    def test_base64_functionality(self):
         encoded_string = base64.b64encode(self.test_file_binary_content).decode("utf-8")
         decoded_string = base64.b64decode(encoded_string).decode("utf-8")
         self.assertEqual(decoded_string, self.test_file_binary_content.decode("utf-8"))
         self.assertEqual(decoded_string.encode(), self.test_file_binary_content)
 
     def test_file_upload_and_download(self):
-        """
-            Test file upload and download functionality.
-        """
-
         # Upload the file
         payload = {
             'name': self.test_file_name,
@@ -55,13 +61,16 @@ class FileUploadDownloadTestCase(APITestCase):
         response = self.client.post(
             self.upload_url, 
             data=payload,  # APIClient automatically encodes to JSON
-            format="json"   # Ensures content_type="application/json"
+            format="json",   # Ensures content_type="application/json"
+            HTTP_AUTHORIZATION=f"Bearer {self.access_token}"
         )
         
         # Assert that the upload was successful
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(f'File {self.test_file_name}.{self.test_file_extension} uploaded successfully.', response.json()['message'])
         self.assertEqual(NexusFile.objects.all().filter(name = "test_toy_drummer").count(), 1)
+        uploaded_file = NexusFile.objects.get(name = "test_toy_drummer")
+        self.assertEqual(uploaded_file.owner, self.user)
 
         # Now, test the file download
         response = self.client.get(self.download_url)
@@ -81,17 +90,19 @@ class FileUploadDownloadTestCase(APITestCase):
             'file_content': base64.b64encode(self.test_file_binary_content).decode("utf-8")
         }
         response = self.client.post(
-            self.upload_url, 
+            path=self.upload_url, 
             data=payload,  # APIClient automatically encodes to JSON
-            format="json"   # Ensures content_type="application/json"
+            format="json",   # Ensures content_type="application/json"
+            HTTP_AUTHORIZATION=f"Bearer {self.access_token}",
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         # Upload the same file with the same name 
         response = self.client.post(
-            self.upload_url, 
+            path= self.upload_url, 
             data=payload,  # APIClient automatically encodes to JSON
-            format="json"   # Ensures content_type="application/json"
+            format="json",   # Ensures content_type="application/json"
+            HTTP_AUTHORIZATION=f"Bearer {self.access_token}",
         )
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(response.json()['error'], f"A record with name '{self.test_file_name}.{self.test_file_extension}' already exists, violating uniqueness constraint.")
@@ -116,9 +127,10 @@ class FileUploadDownloadTestCase(APITestCase):
                 'file_content': base64.b64encode(self.test_file_binary_content).decode("utf-8")
             }
             response = self.client.post(
-                self.upload_url, 
+                path= self.upload_url, 
                 data=payload,  # APIClient automatically encodes to JSON
-                format="json"   # Ensures content_type="application/json"
+                format="json",   # Ensures content_type="application/json"
+                HTTP_AUTHORIZATION=f"Bearer {self.access_token}",
             )
 
         # Test the list API

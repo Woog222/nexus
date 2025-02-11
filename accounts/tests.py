@@ -1,23 +1,20 @@
+# engine/tests.py
 from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.urls import path
+from django.urls import path, reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework.response import Response
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.test import APITestCase, APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 import logging, requests, json, jwt, datetime, copy
 
-from accounts.utils import (
-    create_access_token,
-    create_refresh_token,
-    refresh_access_token,
-    validate_JWTtoken
-)
 from .views import AppleOauthView
 from .models import NexusUser
 from .serializers import NexusUserSerializer
@@ -166,23 +163,79 @@ class NexusUserManagerTests(TestCase):
         self.assertEqual(user.user_name, self.user_name)  
 
 
-
 class NexusUserAPITestCase(APITestCase):
     """ Test User API """
 
     def setUp(self):
-        """Set up test data before each test"""
-        self.user_id = 'test-user-123'
+        self.user_id = 'test_user_123'
         self.email = 'test@example.com'
+        self.user_name = 'test_user_name'
 
-        self.user = NexusUser.objects.create(user_id=self.user_id, email=self.email)
-        self.access_token = create_access_token(self.user_id, self.email)
+        self.user = get_user_model().objects.create(user_id=self.user_id, email=self.email)
+        refresh = RefreshToken.for_user(self.user)
+
+        self.user_detail_url = reverse('user-detail')
+        self.user_update_url = reverse('user-update')
+        self.refresh_access_token_url = reverse('token-refresh')
+
+        self.token_creation_timestamp = timezone.now().timestamp()
+        self.access_token = str(refresh.access_token)
+        self.refresh_token = str(refresh)
+
+    def test_token_basic(self):
+        decoded_access = jwt.decode(self.access_token, settings.SIMPLE_JWT["SIGNING_KEY"], algorithms=["HS256"])
+        decoded_refresh = jwt.decode(self.refresh_token, settings.SIMPLE_JWT["SIGNING_KEY"], algorithms=["HS256"])
+        # Validate Token creation Time (iat)
+        self.assertAlmostEqual(decoded_access["iat"], self.token_creation_timestamp, delta=5)  # Allow 5 sec margin
+        self.assertAlmostEqual(decoded_refresh["iat"], self.token_creation_timestamp, delta=5)  # Allow 5 sec margin
+
+        # Validate Access Token Expiration
+        expected_access_exp = self.token_creation_timestamp + settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()
+        self.assertAlmostEqual(decoded_access["exp"], expected_access_exp, delta=5)  # Allow 5 sec margin
+
+        # Validate Refresh Token Expiration
+        expected_refresh_exp = self.token_creation_timestamp + settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()
+        self.assertAlmostEqual(decoded_refresh["exp"], expected_refresh_exp, delta=5)  # Allow 5 sec margin
+
+    def test_refresh_access_token(self):
+        response = self.client.post(
+            path = self.refresh_access_token_url,
+            data= {"refresh" : self.refresh_token}
+        )
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+
+        # Decode the tokens
+        access_token = response.data["access"]
+        refresh_token = response.data["refresh"]
+
+        decoded_access = jwt.decode(access_token, settings.SIMPLE_JWT["SIGNING_KEY"], algorithms=["HS256"])
+        decoded_refresh = jwt.decode(refresh_token, settings.SIMPLE_JWT["SIGNING_KEY"], algorithms=["HS256"])
+
+        self.assertEqual(decoded_access['token_type'], 'access')
+        self.assertEqual(decoded_refresh['token_type'], 'refresh')
+        self.assertEqual(decoded_access['user_id'], self.user_id)
+        self.assertEqual(decoded_refresh['user_id'], self.user_id)
+
+        # Get current timestamp (in UTC)
+        now_timestamp = timezone.now().timestamp()
+
+        # Validate Token creation Time (iat)
+        self.assertAlmostEqual(decoded_access["iat"], now_timestamp, delta=5)  # Allow 5 sec margin
+        self.assertAlmostEqual(decoded_refresh["iat"], now_timestamp, delta=5)  # Allow 5 sec margin
+
+        # Validate Access Token Expiration
+        expected_access_exp = now_timestamp + settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()
+        self.assertAlmostEqual(decoded_access["exp"], expected_access_exp, delta=5)  # Allow 5 sec margin
+
+        # Validate Refresh Token Expiration
+        expected_refresh_exp = now_timestamp + settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()
+        self.assertAlmostEqual(decoded_refresh["exp"], expected_refresh_exp, delta=5)  # Allow 5 sec margin
+
         
-    def test_get_user_success(self):
-        """ Test retrieving user information with a valid access token"""
-
+    def test_get_user_detail_success(self):
         response = self.client.get(
-            f"/accounts/{self.user_id}/", 
+            path=self.user_detail_url, 
             HTTP_AUTHORIZATION=f"Bearer {self.access_token}"  # Send the token in header
         )
 
@@ -192,75 +245,49 @@ class NexusUserAPITestCase(APITestCase):
         self.assertDictEqual(response.json(), expected_data)
 
     def test_missing_access_token(self):
-        """ Test request with no access token"""
-        response = self.client.get(f"/accounts/{self.user_id}/")
-
+        response = self.client.get(path=self.user_detail_url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertDictEqual(response.json(), {'error': 'Access token is missing'})
 
     def test_invalid_access_token(self):
-        """ Test request with an invalid access token"""
         response = self.client.get(
-            f"/accounts/{self.user_id}/", 
+            path = self.user_detail_url, 
             HTTP_AUTHORIZATION='Bearer invalid_token'
         )
-
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertEqual(response.json(), {'error': 'Invalid token'})
 
-    def test_expired_access_token(self):
-        """ Test request with an expired access token"""
-        expired_token = jwt.encode(
-            {'user_id': self.user_id, 'exp': 0},  # Expired timestamp
-            settings.JWT_SECRET_KEY,
-            algorithm='HS256'
+
+
+    def test_access_token_of_non_existing_user(self):
+        self.user = get_user_model().objects.create_user(
+            user_id="test_user_id",
+            email="test_email@gmail.com",
+            user_name= "test_user_name" 
         )
+        refresh = RefreshToken.for_user(self.user)
+        access_token = str(refresh.access_token)
 
+        # valid yet
         response = self.client.get(
-            f"/accounts/{self.user_id}/", 
-            HTTP_AUTHORIZATION=f"Bearer {expired_token}"
+            path = self.user_detail_url, 
+            HTTP_AUTHORIZATION=f"Bearer {access_token}"
         )
-
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertEqual(response.json(), {'error': 'Token has expired'})
-
-    def test_valid_token_with_non_existing_user(self):
-        """ Test retrieving user information for a non-existent user"""
-        non_existing_user_id = "asdfasdf"
-        valid_token_anyway = create_access_token(non_existing_user_id, 'other@example.com')
-
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user_id'], 'test_user_id')
+        
+        # after the user deleted
+        self.user.delete()
         response = self.client.get(
-            f"/accounts/{non_existing_user_id}/",
-            HTTP_AUTHORIZATION=f"Bearer {valid_token_anyway}"
-        )
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertDictEqual(response.json(), {'error': 'User not found'})
-
-    def test_valid_token_for_another_user(self):
-        """ Test request where valid token belongs to a different user"""
-        another_token = create_access_token('another-user', 'other@example.com')
-
-        response = self.client.get(
-            f"/accounts/{self.user_id}/",
-            HTTP_AUTHORIZATION=f"Bearer {another_token}"
+            path = self.user_detail_url, 
+            HTTP_AUTHORIZATION=f"Bearer {access_token}"
         )
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertDictEqual(response.json(), {'error': 'Invalid token for this user'})
-
-
-
-
-
-
-
-
-
 
 
 """
     Views for testing only
 """
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def test_view(request):
     non_existing_keys = ["access_token", "token_type",]
     temp_data = ["expires_in", "refresh_token", "id_token"]
@@ -295,7 +322,7 @@ class DRFResponseTest(TestCase):
             'reponse.json()' : temp_data
         }
         response_before_sent= Response(my_dict)  
-        self.assertEqual(response_before_sent.data, my_dict)
+        self.assertDictEqual(response_before_sent.data, my_dict)
         self.assertIsInstance(response_before_sent.data, dict)
         self.assertEqual(response_before_sent.get('Content-Type'), 'text/html; charset=utf-8')
         
@@ -303,8 +330,8 @@ class DRFResponseTest(TestCase):
             After response.render() called, Content-Type is set automatically (usually as application/json)
             Check SimpleTemplateResponse and its subclass, DRF Response with their renderers
         """
-        response_received = self.client.get('/test-api/')
-        self.assertEqual(response_received.data, my_dict)
+        response_received = self.client.get(path= '/test-api/')
+        self.assertDictEqual(response_received.data, my_dict)
         self.assertIsInstance(response_received.data, dict)
         self.assertEqual(response_received.get('Content-Type'), 'application/json')
 
@@ -345,25 +372,24 @@ class DRFResponseTest(TestCase):
             self.assertEqual(response.data, response_body)  # Assert that the response data matches the response body
             #self.assertEqual(response.get('Content-Type'), 'application/json')
 
+
 class AppleOauthViewTestCase(APITestCase):
     
     def setUp(self):
         self.client = APIClient()  
-        self.url = "/accounts/oauth/apple/callback/"  
+        self.callback_url = reverse('apple-callback')
     
     def test_callback_view_with_invalid_data(self):
-        """Simulate a callback with invalid 'code' value"""
-
-        response = self.client.post(self.url, data={
+        response = self.client.post(self.callback_url, data={
             'code': 'invalid_auth_code'
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.get('Content-Type'), 'application/json')
         
     def test_callback_view_without_data(self):
-        """Simulate a callback without the 'code' parameter"""
 
-        response = self.client.post(self.url, data={}, format='json')
+        # without "code" 
+        response = self.client.post(self.callback_url, data={}, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         # {'error' : 'code is missing'}, dict
@@ -371,7 +397,7 @@ class AppleOauthViewTestCase(APITestCase):
         self.assertEqual(response.data.get('error'), "code is missing")
         self.assertEqual(response.get('Content-Type'), 'application/json')
 
-
+"""
 class JWTTokenUtilsTest(TestCase):
     def setUp(self):
         self.user_id = "test-user-123"
@@ -459,9 +485,7 @@ class JWTTokenUtilsTest(TestCase):
             validate_JWTtoken(expired_token)
 
     def make_tampered_token(self, token:str):
-        """
-        Generate several tampered JWT tokens for testing.
-        """
+
         header_base64, payload_base64, signature_base64 = token.split('.')
         tampered_tokens = []
 
@@ -504,8 +528,9 @@ class JWTTokenUtilsTest(TestCase):
         for tampered_token in tampered_tokens:
             with self.assertRaises(jwt.InvalidTokenError):
                 validate_JWTtoken(tampered_token)
+"""
 
-
+"""
 class JWTAuthorizationAPITestCase(APITestCase):
     def setUp(self):
         self.user_id = "test-user-123"
@@ -521,7 +546,7 @@ class JWTAuthorizationAPITestCase(APITestCase):
         self.url = "/accounts/auth/refresh/"
 
     def test_refresh_token_success(self):
-        """Test refreshing access token with a valid refresh token"""
+
         response = self.client.post(self.url, {"refresh_token": self.refresh_token}, format="json")
 
         logger.debug(response.data)
@@ -529,13 +554,13 @@ class JWTAuthorizationAPITestCase(APITestCase):
         self.assertIn("access_token", response.json())
 
     def test_missing_refresh_token(self):
-        """Test request with no refresh token"""
+
         response = self.client.post(self.url, {}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertDictEqual(response.data, { 'error': 'Refresh token is required' })
 
     def test_invalid_refresh_token(self):
-        """Test refreshing with an invalid refresh token"""
+
         response = self.client.post(self.url, {"refresh_token": "invalid_token"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertDictEqual(response.data, {'error': 'Invalid refresh token'})
@@ -553,4 +578,4 @@ class JWTAuthorizationAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertDictEqual(response.data, {'error': 'Refresh token has expired'})
-
+"""

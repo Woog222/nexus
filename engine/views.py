@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import JSONParser
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 import os, logging, base64
 
@@ -22,6 +23,7 @@ class FileUploadAPIView(APIView):
     API view for uploading files.
     """
     parser_classes = [JSONParser]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         """
@@ -66,7 +68,7 @@ class FileUploadAPIView(APIView):
                 f.write(base64.b64decode(file_content))
 
             # Save the metadata to the database
-            a = NexusFile(name=name, file_extension=file_extension)
+            a = NexusFile(name=name, file_extension=file_extension, owner = request.user)
             a.save()
             logger.info(f"File {name}.{file_extension} uploaded successfully.")
             return Response(
@@ -85,6 +87,7 @@ class FileDownloadAPIView(APIView):
     """
     API view for downloading files.
     """
+    permission_classes = [AllowAny]
     def get(self, request, file_name, *args, **kwargs):
         """
         Download the requested file from the repository using FileResponse.
@@ -113,6 +116,7 @@ class FilePagination(PageNumberPagination):
     max_page_size = 100  # Maximum items per page
 
 class FileListAPIView(ListAPIView):
+    permission_classes = [AllowAny]
     queryset = NexusFile.objects.all()
     serializer_class = NexusFileSerializer
     pagination_class = FilePagination
@@ -121,6 +125,7 @@ class FileListAPIView(ListAPIView):
 
 @api_view(['DELETE'])
 def reset_ultimately(request):
+    permission_classes = [IsAuthenticated]
     try:
         # Delete all NexusFile objects from the database
         NexusFile.objects.all().delete()
@@ -151,6 +156,8 @@ def reset_ultimately(request):
         
 @api_view(['PUT'])
 def db_update(request):
+
+    permission_classes = [IsAuthenticated]
     
     try:
         # Delete all NexusFile objects from the database

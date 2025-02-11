@@ -116,6 +116,8 @@ def validate_apple_id_token(id_token:str, client_id:str):
 ########################################################
 #                    JWT Token Utils                   #
 ########################################################
+
+"""
 def create_access_token(user_id: str, email: str):
     now = timezone.now()
     payload = {
@@ -139,10 +141,7 @@ def create_refresh_token(user_id: str):
 
 
 def refresh_access_token(refresh_token: str):
-    """ 
-    Returns a new access_token
-    jwt.ExpiredSignatureError, jwt.InvalidTokenError are handled by caller.
-    """
+
     decoded = validate_JWTtoken(refresh_token)
     user_id = decoded['user_id']
     user = NexusUser.objects.get(user_id=user_id)  # Use the correct ORM query
@@ -152,9 +151,9 @@ def refresh_access_token(refresh_token: str):
 
 
 def validate_JWTtoken(token):
-    """
-    Validates a JWT Token.
-    jwt.ExpiredSignatureError, jwt.InvalidTokenError are handled by caller.
-    """
+
     return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
 
+
+
+"""

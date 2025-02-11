@@ -8,9 +8,34 @@ load_dotenv()
 """
 JWT
 """
-JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')  # Default for safety
-JWT_ACCESS_TOKEN_TIMEDELTA= datetime.timedelta(minutes=30)
-JWT_REFRESH_TOKEN_TIMEDELTA = datetime.timedelta(days=30)
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')  
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES' : [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
+
+# SimpleJWT settings (Latest Configuration)
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(days=1),  # 5 minutes
+    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=7),  # 7 days
+    'ROTATE_REFRESH_TOKENS': True,  # Issue a new refresh token on use
+    'BLACKLIST_AFTER_ROTATION': True,  # Blacklist old refresh tokens
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': JWT_SECRET_KEY,  # Use Django's SECRET_KEY
+    'VERIFYING_KEY': None,
+    'AUTH_HEADER_TYPES': ('Bearer',),  # Use "Bearer <token>" format
+    'USER_ID_FIELD': 'user_id',
+    'USER_ID_CLAIM': 'user_id',
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    "TOKEN_OBTAIN_SERIALIZER": "accounts.serializers.MyTokenObtainPairSerializer",
+    'JTI_CLAIM': 'jti',  # Unique token identifier
+}
+
 
 """
 APPLE 
@@ -27,3 +52,4 @@ with open("accounts/private/apple_authkey.p8", "r") as f:
 
 
 APPLE_USER_ID_PREFIX = "APPLE" # user id : {prefix}_{apple_sub}
+
