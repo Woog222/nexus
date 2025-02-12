@@ -55,7 +55,7 @@ class NexusUser(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return f"{self.user_id}"
 
-"""
+
     def delete(self, *args, **kwargs):
         # Override the delete method to remove the profile image before deleting the instance
         if self.profile_image:
@@ -63,4 +63,3 @@ class NexusUser(AbstractBaseUser, PermissionsMixin):
             if self.profile_image.name != 'user_profile_images/default_profile.jpg' and  os.path.isfile(file_path):
                 os.remove(file_path)  # Delete the actual file
             super(NexusUser, self).delete(*args, **kwargs)
-"""
