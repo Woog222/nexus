@@ -3,6 +3,11 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 
+import os
+
+from . import utils
+
+
 class NexusUserManager(BaseUserManager):
     """Custom user manager that handles user creation via Apple OAuth"""
 
@@ -28,6 +33,13 @@ class NexusUser(AbstractBaseUser, PermissionsMixin):
     user_id = models.CharField(max_length=255, unique=True)  # sub from Apple
     user_name = models.CharField(max_length=255, null=False, blank=False, default="Anonymous_user")
     email = models.EmailField(null=False, blank=False)
+    profile_image = models.ImageField(
+        upload_to= utils.get_NexusUser_profile_image_upload_path,
+        default="user_profile_images/default_profile.jpg",
+        null = False,
+        blank = False
+    )
+
 
     apple_access_token = models.TextField(null=True, blank=True)  # todo
     apple_refresh_token = models.TextField(null=True, blank=True)  # todo
@@ -40,4 +52,12 @@ class NexusUser(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ["email"]  # Required when creating superuser
 
     def __str__(self):
-        return self.user_id 
+        return f"{self.user_id}"
+
+    # def delete(self, *args, **kwargs):
+    #     """Override the delete method to remove the profile image before deleting the instance"""
+    #     if self.profile_image:
+    #         file_path = self.profile_image.path
+    #         if os.path.isfile(file_path):
+    #             os.remove(file_path)  # Delete the actual file
+    #     super(NexusUser, self).delete(*args, **kwargs)

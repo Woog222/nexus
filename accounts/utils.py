@@ -2,12 +2,25 @@ from django.utils import timezone
 from django.conf import settings
 
 import requests, jwt, os, datetime, logging
-from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
-
-from .models import NexusUser
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
+
+
+def get_NexusUser_profile_image_upload_path(instance, filename):
+    """Generate a unique path for user profile images."""
+    upload_to = 'user_profile_images'
+    ext = filename.split('.')[-1]  # Extract file extension
+    uuid = uuid4().hex  # Generate a unique filename
+    user_identifier = instance.user_id if instance else "anonymous"
+
+    new_filename = f'{user_identifier}_{uuid}.{ext}'
+    return os.path.join(upload_to, new_filename)
+
+########################################################
+#           APPLE OAUTH (Sign in with apple)           #
+########################################################
 def exchange_apple_auth_code(auth_code: str, APPLE_DATA: dict):
     """ 
     Exchange Apple authorization code for access and identity tokens.
@@ -112,48 +125,4 @@ def validate_apple_id_token(id_token:str, client_id:str):
         })
     
     return decoded_token  # Returns a dictionary of user info
-
-########################################################
-#                    JWT Token Utils                   #
-########################################################
-
-"""
-def create_access_token(user_id: str, email: str):
-    now = timezone.now()
-    payload = {
-        "user_id": user_id,
-        "email": email,
-        "exp": int((now + settings.JWT_ACCESS_TOKEN_TIMEDELTA).timestamp()), 
-        "iat": int(now.timestamp()),
-        "iss": "nexus"
-    }
-    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
-
-def create_refresh_token(user_id: str):
-    now = timezone.now()
-    payload = {
-        "user_id": user_id,
-        "exp": int((now + settings.JWT_REFRESH_TOKEN_TIMEDELTA).timestamp()),  
-        "iat": int(now.timestamp()),
-        "iss": "nexus"
-    }
-    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
-
-
-def refresh_access_token(refresh_token: str):
-
-    decoded = validate_JWTtoken(refresh_token)
-    user_id = decoded['user_id']
-    user = NexusUser.objects.get(user_id=user_id)  # Use the correct ORM query
-    email = user.email  # Access email from the user object
-    return create_access_token(user_id=user_id, email=email)
     
-
-
-def validate_JWTtoken(token):
-
-    return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
-
-
-
-"""

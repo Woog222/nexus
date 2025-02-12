@@ -7,16 +7,15 @@ from .models import NexusUser
 class NexusUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = NexusUser
-        fields = ['user_id', 'user_name', 'email']
+        fields = ['user_id', 'user_name', 'email', 'profile_image']
         read_only_fields = ['user_id']  # Prevent updates to `user_id`
 
     def validate(self, attrs):
-        """Strict validation: Allow only `user_name` and `email` to be updated."""
+        """Strict validation: Allow only `user_name`, `email`, and `profile_image` to be updated."""
         request_method = self.context.get('request').method  # Get HTTP method
 
-        # Only enforce field restrictions for PATCH/PUT (updates)
-        if request_method in ['PATCH', 'PUT']:
-            allowed_fields = {'user_name', 'email'}
+        if request_method in ['PUT', 'PATCH']:  # Apply validation to both PUT and PATCH
+            allowed_fields = {'user_name', 'email', 'profile_image'}
             invalid_fields = set(attrs.keys()) - allowed_fields  # Find unexpected fields
 
             if invalid_fields:
@@ -24,10 +23,18 @@ class NexusUserSerializer(serializers.ModelSerializer):
                     field: "This field is not allowed for updates."
                     for field in invalid_fields
                 })
-
-
-
         return attrs
+
+    def update(self, instance, validated_data):
+        """Handle profile image update correctly"""
+        new_image = validated_data.get("profile_image", None)
+
+        if new_image and instance.profile_image:  
+            instance.profile_image.delete(save=False)  # Delete old image only if a new one is provided
+
+        return super().update(instance, validated_data)
+
+
 
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):

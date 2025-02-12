@@ -11,6 +11,9 @@ djangorestframework = "*"
 uwsgi = "*"
 pyjwt = "*"
 djangorestframework-simplejwt = "*"
+pillow = "*"
+pytest-django = "*"
+factory-boy = "*"
 
 [dev-packages]
 

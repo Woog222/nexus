@@ -1,12 +1,16 @@
 from django.http import QueryDict
 from django.conf import settings
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.views import APIView
-from rest_framework.generics import RetrieveAPIView, UpdateAPIView
+from rest_framework import (
+    permissions, 
+    views,
+    generics,
+    status,
+    parsers,
+    exceptions
+)
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework import status
+
 
 import requests, logging, jwt, os
 from datetime import timedelta
@@ -22,9 +26,9 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
-class AppleOauthView(APIView):
+class AppleOauthView(views.APIView):
     """ Handles Apple OAuth login callback and token exchange. """
-    permission_classes = [AllowAny]
+    permission_classes = [permissions.AllowAny]
 
     APPLE_DATA = {
         'APPLE_CLIENT_ID' : settings.APPLE_CLIENT_ID,
@@ -96,24 +100,30 @@ class AppleOauthView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class NexusUserRetrieveView(RetrieveAPIView):
+class NexusUserRetrieveView(generics.RetrieveAPIView):
     queryset = NexusUser.objects.all()
     serializer_class = NexusUserSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
         """Override get_object to enforce user ownership check."""
         user_id = str(self.request.user.user_id)  # Authenticated user from JWT
+        logger.debug(f" height : {self.request.user.profile_image.height}")
+        logger.debug(f"width : {self.request.user.profile_image.width}")
         return self.queryset.get(user_id=user_id)
 
 
 
 
 
-class NexusUserUpdateView(UpdateAPIView):
+
+
+class NexusUserUpdateView(generics.UpdateAPIView):
     queryset = NexusUser.objects.all()
     serializer_class = NexusUserSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]  # Enable file uploads
+    http_method_names = ['put', 'patch']
 
     def get_object(self):
         """Override get_object to enforce user ownership check."""

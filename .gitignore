@@ -5,6 +5,8 @@ db.sqlite3
 **/private/*
 test.py
 repository/*
+media/*
 
 !**/.gitkeep
 !**/readme.txt
+!media/user_profile_images/default_profile.jpg
