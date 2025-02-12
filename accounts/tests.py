@@ -250,6 +250,7 @@ class NexusUserProfileImageTests(test.APITestCase):
         """Test that the old profile image is deleted when the instance is deleted."""
         old_image_path = self.user.profile_image.path  # Save old image path
         self.user.delete()
+        logger.debug(old_image_path)
 
         # Ensure old file is removed
         self.assertFalse(os.path.exists(old_image_path), "Old profile image was not deleted")
@@ -268,10 +269,8 @@ class NexusUserProfileImageTests(test.APITestCase):
         self.assertEqual(self.user.email, response.json().get('email'))
 
         # put (invalid)
-        logger.debug(response.json())
         response = self.client.put(self.update_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        logger.debug(response.data)
 
 
     def test_unauthorized_access(self):

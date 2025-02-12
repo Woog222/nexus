@@ -31,14 +31,11 @@ class NexusFileUploadAPIView(views.APIView):
             "file_content" : base64_encoded file content
         }
         """
-        logger.debug("POST request received for FileUploadView.")
-        logger.debug(request.headers); logger.debug(request.data)
-        
 
         name = request.data.get('name')
         file_extension = request.data.get('file_extension')
         file_content = request.data.get('file_content')
-        logger.debug(f"{name}.{file_extension} : {file_content[:10]}")
+
 
         if not name or not file_extension or not file_content:
             logger.info("Missing required parameters(name, file_extension, file_content)")
@@ -50,7 +47,7 @@ class NexusFileUploadAPIView(views.APIView):
         
         # Check if a record with the same name already exists
         if NexusFile.objects.filter(name=name).exists():
-            logger.debug(f"Record with name '{name}.{file_extension}' already exists.")
+            logger.info(f"Record with name '{name}.{file_extension}' already exists.")
             return Response(
                 {"error": f"A record with name '{name}.{file_extension}' already exists, violating uniqueness constraint."}, 
                 status=status.HTTP_409_CONFLICT
@@ -89,7 +86,6 @@ class NexusFileDownloadAPIView(views.APIView):
         """
         Download the requested file from the repository using FileResponse.
         """
-        logger.debug(f"GET request received for FileDownloadView to download {file_name}.")
         file_path = os.path.join(settings.BASE_DIR, 'repository', file_name)
 
         if not os.path.exists(file_path):
@@ -101,7 +97,7 @@ class NexusFileDownloadAPIView(views.APIView):
             response = FileResponse(open(file_path, 'rb'), as_attachment=True, filename = file_name)
             return response
         except Exception as e:
-            logger.debug(f"{str(e)}")
+            logger.info(f"{str(e)}")
             return Response(
                 {"error": f"{str(e)}"}, 
                 status=500

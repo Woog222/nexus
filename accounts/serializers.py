@@ -4,6 +4,10 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import NexusUser
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class NexusUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = NexusUser
@@ -27,11 +31,17 @@ class NexusUserSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         """Handle profile image update correctly"""
+
+        
         new_image = validated_data.get("profile_image", None)
+        
+        logger.debug(f"{new_image} -> {instance.profile_image.name}")
 
-        if new_image and instance.profile_image:  
+        if new_image and instance.profile_image and instance.profile_image.name != "user_profile_images/default_profile.jpg":  
+            logger.debug(f"{instance.profile_image.name} deleted")
             instance.profile_image.delete(save=False)  # Delete old image only if a new one is provided
-
+            
+        
         return super().update(instance, validated_data)
 
 

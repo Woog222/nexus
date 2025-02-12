@@ -108,8 +108,6 @@ class NexusUserRetrieveView(generics.RetrieveAPIView):
     def get_object(self):
         """Override get_object to enforce user ownership check."""
         user_id = str(self.request.user.user_id)  # Authenticated user from JWT
-        logger.debug(f" height : {self.request.user.profile_image.height}")
-        logger.debug(f"width : {self.request.user.profile_image.width}")
         return self.queryset.get(user_id=user_id)
 
 

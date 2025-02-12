@@ -37,7 +37,8 @@ class NexusUser(AbstractBaseUser, PermissionsMixin):
         upload_to= utils.get_NexusUser_profile_image_upload_path,
         default="user_profile_images/default_profile.jpg",
         null = False,
-        blank = False
+        blank = False,
+        max_length = 300,
     )
 
 
@@ -54,10 +55,12 @@ class NexusUser(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return f"{self.user_id}"
 
-    # def delete(self, *args, **kwargs):
-    #     """Override the delete method to remove the profile image before deleting the instance"""
-    #     if self.profile_image:
-    #         file_path = self.profile_image.path
-    #         if os.path.isfile(file_path):
-    #             os.remove(file_path)  # Delete the actual file
-    #     super(NexusUser, self).delete(*args, **kwargs)
+"""
+    def delete(self, *args, **kwargs):
+        # Override the delete method to remove the profile image before deleting the instance
+        if self.profile_image:
+            file_path = self.profile_image.path
+            if self.profile_image.name != 'user_profile_images/default_profile.jpg' and  os.path.isfile(file_path):
+                os.remove(file_path)  # Delete the actual file
+            super(NexusUser, self).delete(*args, **kwargs)
+"""
