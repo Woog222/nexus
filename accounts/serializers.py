@@ -8,7 +8,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class NexusUserSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = NexusUser
         fields = ['user_id', 'user_name', 'email', 'profile_image']
@@ -34,13 +36,9 @@ class NexusUserSerializer(serializers.ModelSerializer):
 
         
         new_image = validated_data.get("profile_image", None)
-        
-        logger.debug(f"{new_image} -> {instance.profile_image.name}")
-
         if new_image and instance.profile_image and instance.profile_image.name != "user_profile_images/default_profile.jpg":  
-            logger.debug(f"{instance.profile_image.name} deleted")
             instance.profile_image.delete(save=False)  # Delete old image only if a new one is provided
-            
+
         
         return super().update(instance, validated_data)
 
