@@ -5,16 +5,12 @@ from .views import (
     NexusFileUploadAPIView, 
     NexusFileListAPIView, 
     NexusFileDeleteAPIView,
-    reset_ultimately, 
-    db_update,
 )
 
 urlpatterns = [
-    path('', NexusFileListAPIView.as_view(), name="file_list"),
-    path('upload/', NexusFileUploadAPIView.as_view(), name="file_upload" ),
-    path('download/<str:file_name>/', NexusFileDownloadAPIView.as_view(), name="file_download"),
-    path('delete/<str:file_name>/', NexusFileDeleteAPIView.as_view(), name="file_delete"),
-    
-    path('reset/', reset_ultimately, name="true_reset"),
-    path('db_update/', db_update, name = "db_update"),
+    path("files/list/", NexusFileListAPIView.as_view(), name="file_list"),  # No user_id
+    path("files/list/<str:user_id>/", NexusFileListAPIView.as_view(), name="user_file_list"),
+    path('files/upload/', NexusFileUploadAPIView.as_view(), name="file_upload" ),
+    path('files/download/<str:file_name>/', NexusFileDownloadAPIView.as_view(), name="file_download"),
+    path('files/delete/<str:file_name>/', NexusFileDeleteAPIView.as_view(), name="file_delete"),
 ]

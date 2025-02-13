@@ -9,6 +9,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")  # Replace wit
 django.setup()
 
 from accounts.models import NexusUser
+from engine.models import NexusFile
 from django.conf import settings
 
 if __name__ == '__main__':
@@ -30,3 +31,14 @@ if __name__ == '__main__':
             # print(f"Deleting: {file_path.name}")
             default_storage.delete(str(file_path))  # Deletes the file properly
 
+
+    available_files =[]
+    for nfile in NexusFile.objects.all():
+        available_files.append(os.path.basename(nfile.model_file.name))
+
+    file_dir = Path(settings.MEDIA_ROOT) / 'nexus_models'
+
+    for file_path in file_dir.iterdir():
+        if file_path.is_file() and file_path.name not in available_files:
+            # print(f"Deleting: {file_path.name}")
+            default_storage.delete(str(file_path))  # Deletes the file properly

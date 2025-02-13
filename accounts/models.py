@@ -3,10 +3,12 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 
-import os
+import os, logging
 
 from . import utils
 
+
+logger= logging.getLogger(__name__)
 
 class NexusUserManager(BaseUserManager):
     """Custom user manager that handles user creation via Apple OAuth"""
@@ -62,4 +64,7 @@ class NexusUser(AbstractBaseUser, PermissionsMixin):
             file_path = self.profile_image.path
             if self.profile_image.name != 'user_profile_images/default_profile.jpg' and  os.path.isfile(file_path):
                 os.remove(file_path)  # Delete the actual file
-            super(NexusUser, self).delete(*args, **kwargs)
+
+        logger.info(f"{self.user_name}  ({self.user_id}) is deleted.")
+        super(NexusUser, self).delete(*args, **kwargs)
+        
