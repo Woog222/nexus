@@ -1,8 +1,8 @@
 # engine/models.py
 from django.db import models
-from accounts.models import NexusUser 
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
+from django.contrib.auth import get_user_model
 
 import os, logging
 
@@ -19,13 +19,12 @@ def get_NexusFile_upload_path(instance, filename):
 
 
 class NexusFile(models.Model):
-    owner = models.ForeignKey(NexusUser, on_delete=models.CASCADE, null=True, blank=False)  # Corrected ForeignKey field
+    owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=False)  # Corrected ForeignKey field
     model_file = models.FileField(upload_to=get_NexusFile_upload_path, null=False, blank=False)
-    likes = models.BigIntegerField(null=False, blank=False, default=0)
     views = models.BigIntegerField(null=False, blank=False, default=0)
 
     class Meta:
-        ordering = ['views']
+        ordering = ['-views'] # in descending how?
 
     def __str__(self):
         return f"{os.path.basename(self.model_file.name)}"

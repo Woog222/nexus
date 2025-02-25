@@ -1,7 +1,6 @@
 # engine/tests.py
 from django.urls import reverse
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import (
     status,
@@ -171,3 +170,6 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertIn('views', response.data)
         self.assertIn('model_file', response.data)
         
+
+
+

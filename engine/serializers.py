@@ -7,6 +7,7 @@ import os
 class NexusFileSerializer(serializers.ModelSerializer):
     owner = serializers.SerializerMethodField()  # Custom field for owner
     file_name = serializers.SerializerMethodField()
+    likes= serializers.SerializerMethodField()
 
     class Meta:
         model = NexusFile
@@ -18,6 +19,9 @@ class NexusFileSerializer(serializers.ModelSerializer):
 
     def get_file_name(self, obj):
         return os.path.basename(obj.model_file.name)
+
+    def get_likes(self, obj):
+        return obj.like_users.all().count()
 
 
 """

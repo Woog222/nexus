@@ -29,6 +29,10 @@ class NexusFileUploadAPIView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
 
+        logger.debug(self.request.headers)
+        logger.debug(self.request.data)
+        
+
         model_file = self.request.FILES.get("model_file")  # Retrieve the uploaded file
         if not model_file:
             raise serializers.ValidationError({"model_file": "This field is required."})
@@ -89,5 +93,34 @@ class NexusFileDownloadAPIView(generics.RetrieveAPIView):
         name = os.path.join('nexus_models', file_name)
         return self.queryset.get(model_file = name)
 
+@decorators.api_view(['PATCH'])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def like_view(request, file_name):
+
+    obj = NexusFile.objects.get(model_file = os.path.join('nexus_models', file_name))
+
+    user = request.user # authenticated user
+    user.liked_files.add(obj)
 
 
+    return response.Response({'return' : f'{user} liked {obj}.'}, status = status.HTTP_200_OK)  # Send as a real HTTP response.Response
+
+@decorators.api_view(['PATCH'])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def like_cancel_view(request, file_name):
+
+    obj = NexusFile.objects.get(model_file = os.path.join('nexus_models', file_name))
+    user = request.user # authenticated user
+    user.liked_files.remove(obj)
+
+    return response.Response({'return' : f'{file_name} like canceld.'}, status = status.HTTP_200_OK)  # Send as a real HTTP response
+
+@decorators.api_view(['PATCH'])
+@decorators.permission_classes([permissions.AllowAny])
+def click_view(request, file_name):
+
+    obj = NexusFile.objects.get(model_file = os.path.join('nexus_models', file_name))
+    obj.views += 1
+    obj.save()
+    
+    return response.Response({'return' : f'{file_name} view count added.'}, status = status.HTTP_200_OK)  # Send as a real HTTP response

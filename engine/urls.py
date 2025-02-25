@@ -5,6 +5,10 @@ from .views import (
     NexusFileUploadAPIView, 
     NexusFileListAPIView, 
     NexusFileDeleteAPIView,
+
+    like_view,
+    like_cancel_view,
+    click_view,
 )
 
 urlpatterns = [
@@ -13,4 +17,8 @@ urlpatterns = [
     path('files/upload/', NexusFileUploadAPIView.as_view(), name="file_upload" ),
     path('files/download/<str:file_name>/', NexusFileDownloadAPIView.as_view(), name="file_download"),
     path('files/delete/<str:file_name>/', NexusFileDeleteAPIView.as_view(), name="file_delete"),
+
+    path('files/like/<str:file_name>/', like_view, name = 'like'),
+    path('files/dislike/<str:file_name>/', like_cancel_view, name = 'like_cancel'),
+    path('files/click/<str:file_name>/', click_view, name= 'click')
 ]
