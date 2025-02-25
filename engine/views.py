@@ -78,9 +78,9 @@ class NexusFileListAPIView(generics.ListAPIView):
     pagination_class = FilePagination
 
     def get_queryset(self):
-        user_id = self.kwargs.get("user_id", None)
-        if user_id:
-            return NexusFile.objects.filter(owner__user_id=user_id)  # Files of a specific user
+        username = self.kwargs.get("username", None)
+        if username:
+            return NexusFile.objects.filter(owner__username=username)  # Files of a specific user
         return NexusFile.objects.all()  # Return all files if no user_id
 
 class NexusFileDownloadAPIView(generics.RetrieveAPIView):

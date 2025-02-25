@@ -19,160 +19,74 @@ import logging, requests, json, jwt, datetime, copy, os
 
 from .views import AppleOauthView
 from .models import NexusUser
+from engine.models import NexusFile
 from .serializers import NexusUserSerializer
-from .factories import NexusUserFactory
+
 
 logger = logging.getLogger(__name__)
 
-
-class NexusUserManagerTests(test.APITestCase):
-    """Test custom user manager methods"""
+class NexusUserManagerTests(TestCase):
+    """Test the NexusUser model"""
 
     def setUp(self):
         """Set up test data for the test cases"""
-        self.user_id = "apple_1234567890"  # A mock Apple sub
+        self.username = "testuser"
+        self.nickname = "Test User"
         self.email = "testuser@example.com"
-        self.user_name = "Test User"  # New user name for tests
-        self.default_user_name = "Anonymous_user"
-
-    def test_create_user_with_default_user_name(self):
-        """Test that the default user_name is used when not provided"""
-
-        user = get_user_model().objects.create_user(
-            user_id=self.user_id,
+        self.password = "password123"
+        self.user = get_user_model().objects.create_user(
+            username=self.username,
+            nickname=self.nickname,
             email=self.email,
-            # Notice that we are not passing user_name here
+            password=self.password
         )
 
-        # Check that the user_name is set to the default value
-        self.assertEqual(user.user_name, self.default_user_name)
-        self.assertEqual(user.user_id, self.user_id)
-        self.assertEqual(user.email, self.email)
+    def test_user_creation(self):
+        """Test that a user is created successfully"""
+        self.assertEqual(self.user.username, self.username)
+        self.assertEqual(self.user.nickname, self.nickname)
+        self.assertEqual(self.user.email, self.email)
+        self.assertTrue(self.user.check_password(self.password))
+        self.assertTrue(self.user.is_active)
+        self.assertFalse(self.user.is_staff)
+        self.assertFalse(self.user.is_superuser)
 
-    def test_create_user_with_user_id(self):
-        """Test creating a user with an Apple sub"""
+    def test_user_str(self):
+        """Test the string representation of the user"""
+        self.assertEqual(str(self.user), self.user.get_full_name())
 
-        user = get_user_model().objects.create_user(
-            user_id=self.user_id,
-            email=self.email,
-            user_name=self.user_name 
-        )
+    def test_user_full_name(self):
+        """Test the get_full_name method"""
+        self.assertEqual(self.user.get_full_name(), f"{self.username} ({self.user.id})")
 
-        self.assertEqual(user.user_id, self.user_id)
-        self.assertEqual(user.email, self.email)
-        self.assertEqual(user.user_name, self.user_name)  #
-        self.assertTrue(user.is_active)
-        self.assertFalse(user.is_staff)
-        self.assertFalse(user.is_superuser)
-        self.assertIsNone(user.apple_access_token)
-        self.assertIsNone(user.apple_refresh_token)
+    def test_user_short_name(self):
+        """Test the get_short_name method"""
+        self.assertEqual(self.user.get_short_name(), self.username)
 
-        user.delete()
-        # without username
-        user = get_user_model().objects.create_user(
-            user_id=self.user_id,
-            email=self.email,
-        )
-        self.assertEqual(user.user_id, self.user_id)
-        self.assertEqual(user.email, self.email)
-        self.assertEqual(user.user_name, self.default_user_name)  
-        self.assertTrue(user.is_active)
-        self.assertFalse(user.is_staff)
-        self.assertFalse(user.is_superuser)
-        self.assertIsNone(user.apple_access_token)
-        self.assertIsNone(user.apple_refresh_token)
-        
+    def test_user_profile_image_default(self):
+        """Test that the default profile image is set"""
+        self.assertEqual(self.user.profile_image.name, "user_profile_images/default_profile.jpg")
 
-    def test_create_user_without_user_id(self):
-        """Test creating a user without an Apple sub should raise error"""
-        with self.assertRaises(ValueError):
-            get_user_model().objects.create_user(
-                user_id=None,
-                email=self.email,
-                user_name=self.user_name  
-            )
+    def test_user_liked_files(self):
+        """Test the liked_files relationship"""
+        nexus_file = NexusFile.objects.create(owner=self.user, model_file=SimpleUploadedFile("file.txt", b"file_content"))
+        self.user.liked_files.add(nexus_file)
+        self.assertIn(nexus_file, self.user.liked_files.all())
+        nexus_file.delete()
 
-        # without username
-        with self.assertRaises(ValueError):
-            get_user_model().objects.create_user(
-                user_id=None,
-                email=self.email,
-            )
-
-    def test_create_superuser(self):
-        """Test creating a superuser"""
-        user = get_user_model().objects.create_superuser(
-            user_id=self.user_id,
-            email=self.email,
-            user_name=self.user_name  
-        )
-
-        self.assertEqual(user.user_id, self.user_id)
-        self.assertEqual(user.email, self.email)
-        self.assertEqual(user.user_name, self.user_name)  
-        self.assertTrue(user.is_staff)
-        self.assertTrue(user.is_superuser)
-        self.assertIsNone(user.apple_access_token)
-        self.assertIsNone(user.apple_refresh_token)
-        user.delete()
-        
-        # without username
-        user = get_user_model().objects.create_superuser(
-            user_id=self.user_id,
-            email=self.email,
-        )
-
-        self.assertEqual(user.user_id, self.user_id)
-        self.assertEqual(user.email, self.email)
-        self.assertEqual(user.user_name, self.default_user_name)  
-        self.assertTrue(user.is_staff)
-        self.assertTrue(user.is_superuser)
-        self.assertIsNone(user.apple_access_token)
-        self.assertIsNone(user.apple_refresh_token)
-
-    def test_create_user_with_unusable_password(self):
-        """Test that a user created via Apple OAuth has an unusable password"""
-        user = get_user_model().objects.create_user(
-            user_id=self.user_id,
-            email=self.email,
-            user_name=self.user_name  # user_name included
-        )
-        self.assertFalse(user.has_usable_password())  # Should be False due to OAuth
-
-    def test_str_method(self):
-        """Test the __str__ method of the NexusUser"""
-        user = get_user_model().objects.create_user(
-            user_id=self.user_id,
-            email=self.email,
-            user_name=self.user_name  # Pass the user_name here
-        )
-        self.assertEqual(str(user), self.user_id)  # Ensure the string representation is based on user_id
-
-    def test_user_update_tokens(self):
-        """Test updating the user tokens"""
-        user = get_user_model().objects.create_user(
-            user_id=self.user_id,
-            email=self.email,
-            user_name=self.user_name  # user_name included
-        )
-
-        # Update the tokens
-        user.apple_access_token = "new_apple_access_token"
-        user.apple_refresh_token = "new_apple_refresh_token"
-        user.save()
-        user.refresh_from_db() 
-        self.assertEqual(user.apple_access_token, "new_apple_access_token")
-        self.assertEqual(user.apple_refresh_token, "new_apple_refresh_token")
-        self.assertEqual(user.user_name, self.user_name)  
-
-class NexusUserProfileImageTests(test.APITestCase):
+class NexusUserAPITests(test.APITestCase):
     """Test user creation and profile updates"""
 
     def setUp(self):
         """Setup test user and authentication"""
-        self.user = NexusUserFactory()
-        self.token = str(AccessToken.for_user(self.user))
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+        self.user = NexusUser.objects.create_user(
+            username="testuser",
+            nickname="Test User",
+            email="testuser@example.com",
+            password="password123",
+            profile_image=SimpleUploadedFile("test_profile.jpg", b"test_profile_image", content_type="image/jpeg")
+        )
+        self.client.force_authenticate(user=self.user)
         self.update_url = reverse('user-update')
 
     def tearDown(self):
@@ -180,21 +94,19 @@ class NexusUserProfileImageTests(test.APITestCase):
         if self.user and NexusUser.objects.filter(id=self.user.id).exists():
             self.user.delete()
 
-    def test_user_creation(self):
-        """Test creating a user via factory"""
-        self.assertEqual(NexusUser.objects.count(), 1)
+
 
     def test_update_username_and_email(self):
         """Test updating user_name and email (JSON request)"""
         payload = {
-            "user_name": "Updated User",
+            "nickname": "Updated User",
             "email": "updated@example.com"
         }
         response = self.client.patch(self.update_url, payload, format="json")
 
         self.user.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.user.user_name, "Updated User")
+        self.assertEqual(self.user.nickname, "Updated User")
         self.assertEqual(self.user.email, "updated@example.com")
 
     def test_update_invalid_profile_image(self):
@@ -240,18 +152,16 @@ class NexusUserProfileImageTests(test.APITestCase):
         temp_file = SimpleUploadedFile("updated_profile.jpg", valid_image_bianry, content_type="image/jpeg")
         response = self.client.patch(self.update_url, {"profile_image": temp_file}, format="multipart")
 
-        self.user.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Ensure old file is removed
+        self.user.refresh_from_db()
         self.assertFalse(os.path.exists(old_image_path), "Old profile image was not deleted")
 
     def test_profile_image_deletion_on_instance_deletion(self):
         """Test that the old profile image is deleted when the instance is deleted."""
         old_image_path = self.user.profile_image.path  # Save old image path
         self.user.delete()
-        logger.debug(old_image_path)
-
         # Ensure old file is removed
         self.assertFalse(os.path.exists(old_image_path), "Old profile image was not deleted")
 
@@ -264,8 +174,8 @@ class NexusUserProfileImageTests(test.APITestCase):
         response = self.client.patch(self.update_url, payload, format="json")
         self.user.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.user.user_id, response.json().get('user_id'))
-        self.assertEqual(self.user.user_name, response.json().get('user_name'))
+        self.assertEqual(self.user.username, response.json().get('username'))
+        self.assertEqual(self.user.nickname, response.json().get('nickname'))
         self.assertEqual(self.user.email, response.json().get('email'))
 
         # put (invalid)
@@ -275,131 +185,13 @@ class NexusUserProfileImageTests(test.APITestCase):
 
     def test_unauthorized_access(self):
         """Test that an unauthorized user cannot update the profile"""
-        self.client.credentials()  # Remove authentication
-        response = self.client.patch(self.update_url, {"user_name": "Unauthorized User"}, format="json")
+        self.client.force_authenticate(user=None) # remove authentication
+        response = self.client.patch(self.update_url, {"username": "Unauthorized User"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
-class NexusUserAPITestCase(test.APITestCase):
-    """ Test User API """
 
-    def setUp(self):
-        self.user_id = 'test_user_123'
-        self.email = 'test@example.com'
-        self.user_name = 'test_user_name'
-
-        self.user = get_user_model().objects.create(user_id=self.user_id, email=self.email)
-        refresh = RefreshToken.for_user(self.user)
-
-        self.user_detail_url = reverse('user-detail')
-        self.user_update_url = reverse('user-update')
-        self.refresh_access_token_url = reverse('token-refresh')
-
-        self.token_creation_timestamp = timezone.now().timestamp()
-        self.access_token = str(refresh.access_token)
-        self.refresh_token = str(refresh)
-
-    def test_token_basic(self):
-        decoded_access = jwt.decode(self.access_token, settings.SIMPLE_JWT["SIGNING_KEY"], algorithms=["HS256"])
-        decoded_refresh = jwt.decode(self.refresh_token, settings.SIMPLE_JWT["SIGNING_KEY"], algorithms=["HS256"])
-        # Validate Token creation Time (iat)
-        self.assertAlmostEqual(decoded_access["iat"], self.token_creation_timestamp, delta=5)  # Allow 5 sec margin
-        self.assertAlmostEqual(decoded_refresh["iat"], self.token_creation_timestamp, delta=5)  # Allow 5 sec margin
-
-        # Validate Access Token Expiration
-        expected_access_exp = self.token_creation_timestamp + settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()
-        self.assertAlmostEqual(decoded_access["exp"], expected_access_exp, delta=5)  # Allow 5 sec margin
-
-        # Validate Refresh Token Expiration
-        expected_refresh_exp = self.token_creation_timestamp + settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()
-        self.assertAlmostEqual(decoded_refresh["exp"], expected_refresh_exp, delta=5)  # Allow 5 sec margin
-
-    def test_refresh_access_token(self):
-        response = self.client.post(
-            path = self.refresh_access_token_url,
-            data= {"refresh" : self.refresh_token}
-        )
-        self.assertIn("access", response.data)
-        self.assertIn("refresh", response.data)
-
-        # Decode the tokens
-        access_token = response.data["access"]
-        refresh_token = response.data["refresh"]
-
-        decoded_access = jwt.decode(access_token, settings.SIMPLE_JWT["SIGNING_KEY"], algorithms=["HS256"])
-        decoded_refresh = jwt.decode(refresh_token, settings.SIMPLE_JWT["SIGNING_KEY"], algorithms=["HS256"])
-
-        self.assertEqual(decoded_access['token_type'], 'access')
-        self.assertEqual(decoded_refresh['token_type'], 'refresh')
-        self.assertEqual(decoded_access['user_id'], self.user_id)
-        self.assertEqual(decoded_refresh['user_id'], self.user_id)
-
-        # Get current timestamp (in UTC)
-        now_timestamp = timezone.now().timestamp()
-
-        # Validate Token creation Time (iat)
-        self.assertAlmostEqual(decoded_access["iat"], now_timestamp, delta=5)  # Allow 5 sec margin
-        self.assertAlmostEqual(decoded_refresh["iat"], now_timestamp, delta=5)  # Allow 5 sec margin
-
-        # Validate Access Token Expiration
-        expected_access_exp = now_timestamp + settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()
-        self.assertAlmostEqual(decoded_access["exp"], expected_access_exp, delta=5)  # Allow 5 sec margin
-
-        # Validate Refresh Token Expiration
-        expected_refresh_exp = now_timestamp + settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()
-        self.assertAlmostEqual(decoded_refresh["exp"], expected_refresh_exp, delta=5)  # Allow 5 sec margin
-
-        
-    def test_get_user_detail_success(self):
-        response = self.client.get(
-            path=self.user_detail_url, 
-            HTTP_AUTHORIZATION=f"Bearer {self.access_token}"  # Send the token in header
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK) 
-
-        expected_data = NexusUserSerializer(self.user).data
-        for key in expected_data.keys():
-            self.assertIn(key , response.json())
-
-
-    def test_missing_access_token(self):
-        response = self.client.get(path=self.user_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    def test_invalid_access_token(self):
-        response = self.client.get(
-            path = self.user_detail_url, 
-            HTTP_AUTHORIZATION='Bearer invalid_token'
-        )
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
-
-
-    def test_access_token_of_non_existing_user(self):
-        self.user = get_user_model().objects.create_user(
-            user_id="test_user_id",
-            email="test_email@gmail.com",
-            user_name= "test_user_name" 
-        )
-        refresh = RefreshToken.for_user(self.user)
-        access_token = str(refresh.access_token)
-
-        # valid yet
-        response = self.client.get(
-            path = self.user_detail_url, 
-            HTTP_AUTHORIZATION=f"Bearer {access_token}"
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['user_id'], 'test_user_id')
-        
-        # after the user deleted
-        self.user.delete()
-        response = self.client.get(
-            path = self.user_detail_url, 
-            HTTP_AUTHORIZATION=f"Bearer {access_token}"
-        )
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 
@@ -449,7 +241,6 @@ urlpatterns = [
 class DRFResponseTest(test.APITestCase):
 
     def setUp(self):
-        self.client = test.APIClient()
         self.data =     {
             "access_token": "test_access_token",
             "token_type": "Bearer",

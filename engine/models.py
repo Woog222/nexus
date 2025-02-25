@@ -12,7 +12,7 @@ logger= logging.getLogger(__name__)
 def get_NexusFile_upload_path(instance, filename):
     """Generate a unique path for user profile images."""
     upload_to = 'nexus_models'
-    new_filename = f'{instance.owner.user_id}__{filename}' # is it okay?
+    new_filename = f'{instance.owner.username}__{filename}'
     return os.path.join(upload_to, new_filename)
 
 

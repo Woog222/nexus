@@ -29,8 +29,8 @@ SIMPLE_JWT = {
     'SIGNING_KEY': JWT_SECRET_KEY,  # Use Django's SECRET_KEY
     'VERIFYING_KEY': None,
     'AUTH_HEADER_TYPES': ('Bearer',),  # Use "Bearer <token>" format
-    'USER_ID_FIELD': 'user_id',
-    'USER_ID_CLAIM': 'user_id',
+    'USER_ID_FIELD': 'username',
+    'USER_ID_CLAIM': 'username',
     'TOKEN_TYPE_CLAIM': 'token_type',
     "TOKEN_OBTAIN_SERIALIZER": "accounts.serializers.MyTokenObtainPairSerializer",
     'JTI_CLAIM': 'jti',  # Unique token identifier

@@ -15,7 +15,7 @@ class NexusFileSerializer(serializers.ModelSerializer):
         read_only_fields = ['owner', 'model_file']
 
     def get_owner(self, obj):
-        return {'user_name' : obj.owner.user_name, 'user_id' : obj.owner.user_id }
+        return {'username' : obj.owner.username, 'nickname' : obj.owner.nickname }
 
     def get_file_name(self, obj):
         return os.path.basename(obj.model_file.name)

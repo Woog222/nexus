@@ -13,8 +13,8 @@ def get_NexusUser_profile_image_upload_path(instance, filename):
     upload_to = 'user_profile_images'
     ext = filename.split('.')[-1]  # Extract file extension
     uuid = uuid4().hex  # Generate a unique filename
-    user_identifier = instance.user_id if instance else "anonymous"
-
+    user_identifier = instance.username if instance else "anonymous"
+    
     new_filename = f'{user_identifier}_{uuid}.{ext}'
     return os.path.join(upload_to, new_filename)
 

@@ -20,12 +20,12 @@ class NexusFileAPITestCase(test.APITestCase):
     def setUp(self):
         """Create a test user and authenticate them."""
         self.authenticated_user = NexusUser.objects.create(
-            user_id= "user1", 
-            user_name = "authenticated_user",
+            username= "user1", 
+            nickname = "authenticated_user",
             email= "test1@example.com")
         self.unauthenticated_user = NexusUser.objects.create(
-            user_id = "user2", 
-            user_name = "unauthenticated_user",
+            username = "user2", 
+            nickname = "unauthenticated_user",
             email= "test2@example.com")
         self.client.force_authenticate(user=self.authenticated_user) # Authenticated the user 
         
@@ -52,7 +52,7 @@ class NexusFileAPITestCase(test.APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['owner']['user_name'], self.authenticated_user.user_name)
+        self.assertEqual(response.data['owner']['username'], self.authenticated_user.username)
         self.assertEqual(NexusFile.objects.filter(owner = self.authenticated_user).count(), 1)
         self.assertEqual(NexusFile.objects.filter(owner = self.unauthenticated_user).count(), 0)
 
@@ -125,7 +125,7 @@ class NexusFileAPITestCase(test.APITestCase):
                 format    =   "multipart",
             )
             logger.debug(response.data)
-            self.assertEqual(response.data['owner']['user_id'], self.authenticated_user.user_id)
+            self.assertEqual(response.data['owner']['username'], self.authenticated_user.username)
             self.assertIn('file_name', response.data)
 
         response = self.client.get(path = reverse('file_list'))
@@ -133,12 +133,12 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 5)
 
-        response = self.client.get(path = reverse('user_file_list', kwargs = {'user_id' : self.authenticated_user.user_id}))
+        response = self.client.get(path = reverse('user_file_list', kwargs = {'username' : self.authenticated_user.username}))
         logger.debug(response.data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 5)
 
-        response = self.client.get(path = reverse('user_file_list', kwargs = {'user_id' : self.unauthenticated_user.user_id}))
+        response = self.client.get(path = reverse('user_file_list', kwargs = {'username' : self.unauthenticated_user.username}))
         logger.debug(response.data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 0)
@@ -162,8 +162,8 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertEqual(response["Content-Type"], 'application/json')
 
         self.assertDictEqual(response.data['owner'], {
-            'user_id': self.authenticated_user.user_id,
-            'user_name': self.authenticated_user.user_name
+            'username': self.authenticated_user.username,
+            'nickname': self.authenticated_user.nickname
         })
         self.assertEqual(response.data['file_name'], file_name); 
         self.assertIn('likes', response.data)

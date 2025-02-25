@@ -107,8 +107,8 @@ class NexusUserRetrieveView(generics.RetrieveAPIView):
 
     def get_object(self):
         """Override get_object to enforce user ownership check."""
-        user_id = str(self.request.user.user_id)  # Authenticated user from JWT
-        return self.queryset.get(user_id=user_id)
+        username = str(self.request.user.username)  # Authenticated user from JWT
+        return self.queryset.get(username=username)
 
 
 
@@ -125,5 +125,5 @@ class NexusUserUpdateView(generics.UpdateAPIView):
 
     def get_object(self):
         """Override get_object to enforce user ownership check."""
-        user_id = str(self.request.user.user_id)  # Authenticated user from JWT
-        return self.queryset.get(user_id=user_id)
+        username = str(self.request.user.username)  # Authenticated user from JWT
+        return self.queryset.get(username=username)
