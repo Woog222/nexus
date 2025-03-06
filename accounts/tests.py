@@ -17,15 +17,19 @@ from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 
 import logging, requests, json, jwt, datetime, copy, os
 
-from .views import AppleOauthView
-from .models import NexusUser
+
+from .models import NexusUserRelation
 from engine.models import NexusFile
 from .serializers import NexusUserSerializer
+
+USER_DETAIL_URL_NAME = 'user-detail'
+USER_RELATION_URL_NAME = 'user-relation'
+
 
 
 logger = logging.getLogger(__name__)
 
-class NexusUserManagerTests(TestCase):
+class NexusUserManagerTests(test.APITestCase):
     """Test the NexusUser model"""
 
     def setUp(self):
@@ -51,17 +55,8 @@ class NexusUserManagerTests(TestCase):
         self.assertFalse(self.user.is_staff)
         self.assertFalse(self.user.is_superuser)
 
-    def test_user_str(self):
-        """Test the string representation of the user"""
-        self.assertEqual(str(self.user), self.user.get_full_name())
 
-    def test_user_full_name(self):
-        """Test the get_full_name method"""
-        self.assertEqual(self.user.get_full_name(), f"{self.username} ({self.user.id})")
 
-    def test_user_short_name(self):
-        """Test the get_short_name method"""
-        self.assertEqual(self.user.get_short_name(), self.username)
 
     def test_user_profile_image_default(self):
         """Test that the default profile image is set"""
@@ -74,12 +69,65 @@ class NexusUserManagerTests(TestCase):
         self.assertIn(nexus_file, self.user.liked_files.all())
         nexus_file.delete()
 
-class NexusUserAPITests(test.APITestCase):
+class NexusUserRetrieveTests(test.APITestCase):
+    """Test getting user profile"""
+
+    def setUp(self):
+        logger.debug(f'\n----------------{self._testMethodName}----------------')
+        """Setup test user and authentication"""    
+        self.user = get_user_model().objects.create_user(
+            username="username",
+            nickname="nickname",
+            email="email@example.com",
+            password="password123",
+        )
+
+
+    def tearDown(self):
+        logger.debug(f'\n----------------{self._testMethodName}----------------\n')
+
+    def test_get_user_profile_as_authenticated(self):
+        """Test getting user profile as authenticated"""
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.user.username}))
+        logger.debug(response.json())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('username', response.json())
+        self.assertIn('nickname', response.json())
+        self.assertIn('profile_image', response.json())
+        self.assertIn('email', response.json())
+        self.assertIn('following_users', response.json())
+        self.assertIn('follower_users', response.json())
+        self.assertIn('blocked_users', response.json())
+        self.assertIn('reported_users', response.json())
+
+
+    def test_get_user_profile_as_unauthenticated(self):
+        """Test getting user profile as unauthenticated"""
+
+        self.client.force_authenticate(user=None)
+        response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.user.username}))
+        logger.debug(response.json())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('username', response.json())
+        self.assertIn('nickname', response.json())
+        self.assertIn('profile_image', response.json())
+        self.assertIn('email', response.json())
+        self.assertIn('following_users', response.json())
+        self.assertIn('follower_users', response.json())
+        self.assertIn('blocked_users', response.json())
+        self.assertIn('reported_users', response.json())
+
+
+class NexusUserUpdateTests(test.APITestCase):
     """Test user creation and profile updates"""
 
     def setUp(self):
         """Setup test user and authentication"""
-        self.user = NexusUser.objects.create_user(
+        logger.debug(f'\n----------------{self._testMethodName}----------------')
+
+        self.user = get_user_model().objects.create_user(
             username="testuser",
             nickname="Test User",
             email="testuser@example.com",
@@ -87,27 +135,146 @@ class NexusUserAPITests(test.APITestCase):
             profile_image=SimpleUploadedFile("test_profile.jpg", b"test_profile_image", content_type="image/jpeg")
         )
         self.client.force_authenticate(user=self.user)
-        self.update_url = reverse('user-update')
+        self.update_url = reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.user.username})
 
     def tearDown(self):
         # Check if the user exists in the database and delete it
-        if self.user and NexusUser.objects.filter(id=self.user.id).exists():
+        if self.user and get_user_model().objects.filter(id=self.user.id).exists():
             self.user.delete()
 
+        logger.debug('\n----------------------------------------------------------\n')
 
 
-    def test_update_username_and_email(self):
-        """Test updating user_name and email (JSON request)"""
+    def test_update_required_fields(self):
+        """Test that required fields (nickname) are required"""
+        valid_image_bianry = self.get_valid_image_bianry_content()
         payload = {
             "nickname": "Updated User",
-            "email": "updated@example.com"
+            "profile_image": SimpleUploadedFile("test_profile.jpg", valid_image_bianry, content_type="image/jpeg")
         }
-        response = self.client.patch(self.update_url, payload, format="json")
+
+        # 1. missing nickname
+        temp_payload = copy.deepcopy(payload); temp_payload.pop("nickname")
+        response = self.client.put(self.update_url, temp_payload, format="multipart")    
+        self.user.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+        # 2. missing profile_image
+        temp_payload = copy.deepcopy(payload); temp_payload.pop("profile_image")
+        response = self.client.put(self.update_url, temp_payload, format="multipart")    
+        self.user.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.user.nickname, "Updated User")
+
+        # 3. missing both
+        temp_payload = {}
+        response = self.client.put(self.update_url, temp_payload, format="multipart")    
+        self.user.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST) 
+
+        # 4. valid payload
+        payload['nickname'] = "Updated User2"
+        response = self.client.put(self.update_url, payload, format="multipart")    
+        self.user.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.user.nickname, "Updated User2")
+        self.assertEqual(valid_image_bianry, open(self.user.profile_image.path, 'rb').read())
+
+    def test_update_using_json_request(self):
+        """Test updating user_name and email (JSON request), which is not allowed"""
+        payload = {
+            "nickname": "Updated User",
+        }
+        response = self.client.put(self.update_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.nickname, "Test User") 
+        self.assertEqual(self.user.email, "testuser@example.com") # email read only
+
+
+    def test_update_readonly_fields(self):
+        """Test that readonly fields are not allowed to be updated (ignored)"""
+        valid_image_bianry = self.get_valid_image_bianry_content()
+        payload = {
+            "username": "newusername",
+            "email": "updated@example.com",
+            "nickname": "Updated User",
+            "profile_image": SimpleUploadedFile("test_profile.jpg", valid_image_bianry, content_type="image/jpeg")
+        }
+
+        response = self.client.put(self.update_url, payload, format="multipart")    
+        self.user.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.user.username, "testuser") # username read only
+        self.assertEqual(self.user.email, "testuser@example.com") # email read only
+        self.assertEqual(self.user.nickname, "Updated User")
+        self.assertEqual(valid_image_bianry, open(self.user.profile_image.path, 'rb').read())
+
+    def test_update_using_patch(self):
+        """Test updating nickname and profile_image (JSON request)"""
+        valid_image_bianry_blue = self.get_valid_image_bianry_content(color='blue')
+        valid_image_bianry_red = self.get_valid_image_bianry_content(color='red')
+        payload = {
+            "nickname": "Updated User",
+            "profile_image": SimpleUploadedFile("test_profile.jpg", valid_image_bianry_blue, content_type="image/jpeg")
+        }
+        response = self.client.patch(self.update_url, payload, format="multipart")
 
         self.user.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.user.nickname, "Updated User")
-        self.assertEqual(self.user.email, "updated@example.com")
+        self.assertEqual(valid_image_bianry_blue, open(self.user.profile_image.path, 'rb').read())
+
+        # 2. update profile_image
+        payload = {
+            "profile_image": SimpleUploadedFile("test_profile2.jpg", valid_image_bianry_red, content_type="image/jpeg")
+        }
+        response = self.client.patch(self.update_url, payload, format="multipart")
+        self.user.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(valid_image_bianry_red, open(self.user.profile_image.path, 'rb').read())
+        self.assertEqual(self.user.nickname, "Updated User")
+
+        # 3. update nickname
+        payload = {
+            "nickname": "Updated User 2"
+        }
+        response = self.client.patch(self.update_url, payload, format="multipart")
+        self.user.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.user.nickname, "Updated User 2")
+        self.assertEqual(valid_image_bianry_red, open(self.user.profile_image.path, 'rb').read())
+
+
+    def test_update_nickname_and_email_using_put(self):
+        """Test updating user using put"""
+
+        # put (invalid)
+        payload = {
+            "nickname": "Updated User", # only required field
+        }
+        response = self.client.put(self.update_url, payload, format="multipart") 
+        self.user.refresh_from_db()
+
+        logger.debug(response.json())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.user.nickname, "Updated User") 
+
+        # put (valid)
+        valid_image_bianry_green = self.get_valid_image_bianry_content(color='green')
+        payload = {
+            "nickname": "Updated User2",
+            "profile_image": SimpleUploadedFile("test_profile.jpg", valid_image_bianry_green, content_type="image/jpeg")
+        }
+        response = self.client.put(self.update_url, payload, format="multipart") 
+        self.user.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.user.nickname, "Updated User2")
+        self.assertEqual(valid_image_bianry_green, open(self.user.profile_image.path, 'rb').read())
+        
+
+
 
     def test_update_invalid_profile_image(self):
         """Test updating profile image (multipart/form-data)"""
@@ -119,11 +286,11 @@ class NexusUserAPITests(test.APITestCase):
         # {'profile_image': [ErrorDetail(string='Upload a valid image. The file you uploaded was either not an image or a corrupted image.', code='invalid_image')]}
 
 
-    def get_valid_image_bianry_content(self):
+    def get_valid_image_bianry_content(self, color='red'):
         from io import BytesIO
         from PIL import Image
         # Create a simple valid image using PIL (e.g., a 100x100 red image)
-        img = Image.new('RGB', (100, 100), color='red')
+        img = Image.new('RGB', (100, 100), color=color)
         img_byte_arr = BytesIO()
         img.save(img_byte_arr, format='JPEG')
 
@@ -138,11 +305,8 @@ class NexusUserAPITests(test.APITestCase):
         self.user.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(self.user.profile_image.name.startswith("user_profile_images/"))
-
-        # Compares the contents
-        with open(self.user.profile_image.path, 'rb') as f:
-            file_content = f.read()
-        self.assertEqual(valid_image_bianry, file_content)
+        self.assertEqual(valid_image_bianry, open(self.user.profile_image.path, 'rb').read())
+       
 
     def test_profile_image_deletion_on_update(self):
         """Test that the old profile image is deleted when a new one is uploaded"""
@@ -171,139 +335,279 @@ class NexusUserAPITests(test.APITestCase):
         payload = {"invalid_field": "not allowed"}
 
         # patch (ignored)
-        response = self.client.patch(self.update_url, payload, format="json")
+        response = self.client.patch(self.update_url, payload, format="multipart")
         self.user.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.user.username, response.json().get('username'))
         self.assertEqual(self.user.nickname, response.json().get('nickname'))
         self.assertEqual(self.user.email, response.json().get('email'))
 
-        # put (invalid)
-        response = self.client.put(self.update_url, payload, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+        # put (invalid)
+        response = self.client.put(self.update_url, payload, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST) 
+        
 
     def test_unauthorized_access(self):
         """Test that an unauthorized user cannot update the profile"""
         self.client.force_authenticate(user=None) # remove authentication
-        response = self.client.patch(self.update_url, {"username": "Unauthorized User"}, format="json")
-
+        response = self.client.patch(self.update_url, {"nickname": "Unauthorized User"}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+        response = self.client.put(self.update_url, {"nickname": "Unauthorized User"}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_update_another_user(self):
+        malicious_user = get_user_model()(
+            username="malicioususer",   
+            nickname="Malicious User",
+            email="malicioususer@example.com",
+        )
+        malicious_user.save()
+        self.client.force_authenticate(user=malicious_user)
 
+        response = self.client.patch(self.update_url, {"nickname": "Malicious User"}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+        response = self.client.put(self.update_url, {"nickname": "Malicious User"}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-
-
-class AppleOauthViewTestCase(test.APITestCase):
-    
-    def setUp(self):
-        self.client = test.APIClient()  
-        self.callback_url = reverse('apple-callback')
-    
-    def test_callback_view_with_invalid_data(self):
-        response = self.client.post(self.callback_url, data={
-            'code': 'invalid_auth_code'
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.get('Content-Type'), 'application/json')
-        
-    def test_callback_view_without_data(self):
-
-        # without "code" 
-        response = self.client.post(self.callback_url, data={}, format='json')
-        
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        # {'error' : 'code is missing'}, dict
-        self.assertIn('error', response.data)
-        self.assertEqual(response.data.get('error'), "code is missing")
-        self.assertEqual(response.get('Content-Type'), 'application/json')
-
-"""
-    Views for testing only
-"""
-@decorators.api_view(['GET'])
-@decorators.permission_classes([permissions.AllowAny])
-def test_view(request):
-    non_existing_keys = ["access_token", "token_type",]
-    temp_data = ["expires_in", "refresh_token", "id_token"]
-    my_dict = {
-            'error' : '[' + ', '.join(non_existing_keys) + ']' + " are not included.",
-            'reponse.json()' : temp_data
-        }
-    return Response(my_dict, status = status.HTTP_200_OK)  # Send as a real HTTP response
-urlpatterns = [
-    path('test-api/', test_view),  # Temporary URL for the test
-]
-
-@override_settings(ROOT_URLCONF=__name__)
-class DRFResponseTest(test.APITestCase):
+class NexusUserRelationTests(test.APITestCase): 
+    """Test user relation"""
 
     def setUp(self):
-        self.data =     {
-            "access_token": "test_access_token",
-            "token_type": "Bearer",
-            "expires_in": 3600,
-            "refresh_token": "test_refresh_token",
-            "id_token": "test_id_token",
-        }
-        self.expected_keys = ["access_token", "token_type", "expires_in", "refresh_token", "id_token"]
+        logger.debug(f'\n----------------{self._testMethodName}----------------')
+        """Setup test user and authentication"""
+        self.from_user = get_user_model().objects.create_user(
+            username="fromuser",
+            nickname="From User",
+            email="fromuser@example.com",
+            password="password123",
+        )
+        self.to_user = get_user_model().objects.create_user(
+            username="touser",
+            nickname="To User",
+            email="touser@example.com",
+            password="password123",
+        )
+        self.client.force_authenticate(user=self.from_user)
 
-    def test_response_with_dictionary(self):
-        non_existing_keys = ["access_token", "token_type",]
-        temp_data = ["expires_in", "refresh_token", "id_token"]
-        my_dict = {
-            'error' : '[' + ', '.join(non_existing_keys) + ']' + " are not included.",
-            'reponse.json()' : temp_data
+    def tearDown(self):
+        logger.debug(f'\n----------------{self._testMethodName}----------------\n')
+
+    def test_follow_user(self):
+        """Test following a user"""
+        follow_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': self.to_user.username})
+        payload = {
+            'relation_type': 'follow'
         }
-        response_before_sent= Response(my_dict)  
-        self.assertDictEqual(response_before_sent.data, my_dict)
-        self.assertIsInstance(response_before_sent.data, dict)
-        self.assertEqual(response_before_sent.get('Content-Type'), 'text/html; charset=utf-8')
+
+        response = self.client.post(follow_url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json().get('message'), "fromuser followed touser.")
+        self.assertTrue(self.from_user.relations_by_from_user.filter(to_user=self.to_user, relation_type=NexusUserRelation.FOLLOW).exists())
         
-        """
-            After response.render() called, Content-Type is set automatically (usually as application/json)
-            Check SimpleTemplateResponse and its subclass, DRF Response with their renderers
-        """
-        response_received = self.client.get(path= '/test-api/')
-        self.assertDictEqual(response_received.data, my_dict)
-        self.assertIsInstance(response_received.data, dict)
-        self.assertEqual(response_received.get('Content-Type'), 'application/json')
-
-    def test_key_included_as_expected(self):
-
-        temp_data = copy.deepcopy(self.data)
-        non_existing_keys = [k for k in self.expected_keys if k not in temp_data]
-        self.assertEqual(len(non_existing_keys), 0)
+        # follow again
+        response = self.client.post(follow_url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
 
 
 
-    def test_some_key_is_not_included(self):
-        temp_data = copy.deepcopy(self.data)
-        self.assertEqual(temp_data.pop('id_token'), 'test_id_token')
-
-        non_existing_keys = [k for k in self.expected_keys if k not in temp_data]
-        self.assertEqual(len(non_existing_keys), 1)
-        self.assertIn('id_token', non_existing_keys)
-
-        self.assertEqual(temp_data.pop('expires_in'), 3600)
-        non_existing_keys = [k for k in self.expected_keys if k not in temp_data]
-        self.assertEqual(len(non_existing_keys), 2)
-        self.assertIn('id_token', non_existing_keys); self.assertIn('expires_in', non_existing_keys)
-
-
-        response_body = {
-            'error' : ', '.join(non_existing_keys) + " are not included.",
-            'reponse.json()' : temp_data
+    def test_block_user(self):
+        """Test blocking a user"""  
+        block_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': self.to_user.username})
+        payload = {
+            'relation_type': 'block'
         }
-        # how to emulate
 
-        try:
-            raise ValueError(response_body) # dict as arg
-        except ValueError as e:
-            response = Response(e.args[0], status = status.HTTP_400_BAD_REQUEST)
-            # Assertions using Django TestCase methods
-            self.assertIsInstance(response.data, dict)  # Assert that response.data is a dictionary
-            self.assertEqual(response.data, response_body)  # Assert that the response data matches the response body
-            #self.assertEqual(response.get('Content-Type'), 'application/json')
+        response = self.client.post(block_url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json().get('message'), "fromuser blocked touser.")    
+        self.assertTrue(self.from_user.relations_by_from_user.filter(to_user=self.to_user, relation_type=NexusUserRelation.BLOCK).exists())
+
+        # block again
+        response = self.client.post(block_url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
+
+    def test_report_user(self):
+        """
+        Test user report
+        """
+        reporter = self.from_user
+        malicious_user = self.to_user
+        self.client.force_authenticate(user=reporter)
+
+        payload = {
+            'relation_type': 'report'
+        }
+        report_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': malicious_user.username})
+        response = self.client.post(report_url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json().get('message'), f"{reporter.username} reported {malicious_user.username}.")
+
+
+    def test_invalid_relation_type(self):
+        """Test invalid relation type"""
+        invalid_relation_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': self.to_user.username})
+        payload = {
+            'relation_type': 'invalid'
+        }
+
+        response = self.client.post(invalid_relation_url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.json())
+
+    def test_non_existing_user(self):
+        """Test non-existing user"""
+        non_existing_user_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': 'non_existing_user'})
+        payload = {
+            'relation_type': 'follow'
+        }
+
+        response = self.client.post(non_existing_user_url, payload, format='json')
+        logger.debug(response.json())
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+
+
+class NexusUserComprehensiveAPITests(test.APITestCase):
+    """
+    Comprehensive test for NexusUser API
+    """
+
+    def setUp(self):
+        logger.debug(f'\n-------------------------------{self._testMethodName}-----------------------------------\n')
+        """Setup test user and authentication"""
+
+        self.users = [
+            get_user_model().objects.create_user(
+                username=f"username{i}",
+                nickname=f"nickname{i}",
+                email=f"email{i}@example.com",
+                password="password123"
+            )
+            for i in range(5)
+        ] # users
+
+    def tearDown(self):
+        for user in self.users:
+            user.delete()
+
+        logger.debug(f'\n--------------------------------{self._testMethodName}-----------------------------------\n')
+
+    def test_user_followers(self):
+        """
+        Test user followers
+        user0 is followed by user1 ~ user 4
+        """
+
+        # follow user0 from user1 ~ user4
+        for i in range(1, 5):
+            follow_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': self.users[0].username })
+            payload = {
+                'relation_type': 'follow'
+            }
+            self.client.force_authenticate(user=self.users[i])
+            response = self.client.post(follow_url, payload, format='json')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.json().get('message'), f"{self.users[i].username} followed {self.users[0].username}.")
+
+        follower_users_url = f"{reverse('user-relation', kwargs={'username': self.users[0].username})}?relation_type=follower_users"
+        response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.users[0].username}))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn( follower_users_url, response.json().get('follower_users') )
+
+        response = self.client.get(follower_users_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json().get('count'), 4)
+        for user_profile in response.json().get('results'):
+            self.assertIn(user_profile.get('username'), [self.users[i].username for i in range(1, 5)])
+       
+    def test_user_following(self):
+        """
+        Test user following
+        user0 is following user1 ~ user 4
+        """ 
+
+        for i in range(1, 5):
+            follow_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': self.users[i].username })
+            payload = {
+                'relation_type': 'follow'
+            }
+            self.client.force_authenticate(user=self.users[0])
+            response = self.client.post(follow_url, payload, format='json')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.json().get('message'), f"{self.users[0].username} followed {self.users[i].username}.")
+
+        following_users_url = f"{reverse('user-relation', kwargs={'username': self.users[0].username})}?relation_type=following_users"
+        response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.users[0].username}))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn( following_users_url, response.json().get('following_users') )
+
+        response = self.client.get(following_users_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json().get('count'), 4)
+        for user_profile in response.json().get('results'):
+            self.assertIn(user_profile.get('username'), [self.users[i].username for i in range(1, 5)])
+
+
+    def test_user_blocked_users(self):
+        """
+        Test user blocked users
+        user0 is blocking user1 ~ user 4
+        """
+
+        for i in range(1, 5):
+            block_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': self.users[i].username })
+            payload = {
+                'relation_type': 'block'
+            }
+            self.client.force_authenticate(user=self.users[0])
+            response = self.client.post(block_url, payload, format='json')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.json().get('message'), f"{self.users[0].username} blocked {self.users[i].username}.")
+
+        blocked_users_url = f"{reverse('user-relation', kwargs={'username': self.users[0].username})}?relation_type=blocked_users"
+        response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.users[0].username}))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn( blocked_users_url, response.json().get('blocked_users') )
+
+        response = self.client.get(blocked_users_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json().get('count'), 4)
+        for user_profile in response.json().get('results'):
+            self.assertIn(user_profile.get('username'), [self.users[i].username for i in range(1, 5)])
+
+    def test_user_reported_users(self):
+        """
+        Test user reported users
+        user0 is reporting user1 ~ user 4
+        """ 
+
+        for i in range(1, 5):   
+            report_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': self.users[i].username })
+            payload = {
+                'relation_type': 'report'
+            }
+            self.client.force_authenticate(user=self.users[0])
+            response = self.client.post(report_url, payload, format='json')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.json().get('message'), f"{self.users[0].username} reported {self.users[i].username}.")
+
+        reported_users_url = f"{reverse('user-relation', kwargs={'username': self.users[0].username})}?relation_type=reported_users"
+        response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.users[0].username}))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn( reported_users_url, response.json().get('reported_users') )
+
+        response = self.client.get(reported_users_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json().get('count'), 4)
+        for user_profile in response.json().get('results'):
+            self.assertIn(user_profile.get('username'), [self.users[i].username for i in range(1, 5)])
+
+
+
+

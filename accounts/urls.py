@@ -1,15 +1,16 @@
-from django.urls import path
+# accounts/urls.py
+from django.urls import path, include
 
-from .views import AppleOauthView, NexusUserRetrieveView, NexusUserUpdateView
-from rest_framework_simplejwt.views import (
-    #TokenObtainPairView,
-    TokenRefreshView,
-)
+from .views import NexusUserDetailView, NexusUserRelationView
+
+
+
+USER_DETAIL_URL_NAME = 'user-detail'
+USER_RELATION_URL_NAME = 'user-relation'
+
 
 urlpatterns = [
-    path('oauth/apple/callback/', AppleOauthView.as_view(), name = 'apple-callback'),
-    path('', NexusUserRetrieveView.as_view(), name = 'user-detail'),
-    path('update/', NexusUserUpdateView.as_view(), name = 'user-update'),
-    path('auth/token/refresh/', TokenRefreshView.as_view(), name = 'token-refresh'),
+    path('<str:username>/', NexusUserDetailView.as_view(), name = USER_DETAIL_URL_NAME),
+    path('<str:username>/relation/', NexusUserRelationView.as_view(), name = USER_RELATION_URL_NAME),
 ]
 

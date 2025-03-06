@@ -12,6 +12,8 @@ uwsgi = "*"
 pyjwt = "*"
 djangorestframework-simplejwt = "*"
 pillow = "*"
+django-allauth = "*"
+dj-rest-auth = "*"
 
 [dev-packages]
 

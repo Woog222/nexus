@@ -17,7 +17,7 @@ load_dotenv()
 """
 Import app settings
 """
-from accounts.account_settings import *
+from authApp.auth_settings import *
 
 
 
@@ -57,9 +57,9 @@ ALLOWED_HOSTS = [
 ]
 
 
-# Application definition
 
 INSTALLED_APPS = [
+    # django built-in apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -67,11 +67,47 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    # third party apps
     'rest_framework',
+    'rest_framework.authtoken',
+    'dj_rest_auth',
     
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'dj_rest_auth.registration',
+
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.apple',
+    
+    # django apps
     'accounts',
     'engine',
+    'authApp',
+    
 ]
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_USE_TLS = True
+EMAIL_PORT = 587
+EMAIL_HOST_USER = os.getenv('GOOGLE_MAIL_USER')
+EMAIL_HOST_PASSWORD = os.getenv('GOOGLE_MAIL_PASSWORD')
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES' : [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -81,6 +117,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = 'nexus.urls'
@@ -88,7 +126,7 @@ ROOT_URLCONF = 'nexus.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -237,6 +275,15 @@ LOGGING = {
             'backupCount': 5,
             'formatter': 'standard',
         },
+        'authApp_file': {
+            'level': 'DEBUG',
+            #'filters': ['require_debug_true'],
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs/authApp.log',
+            'maxBytes': 1024*1024*5,  # 5 MB
+            'backupCount': 5,
+            'formatter': 'standard',
+        },
     },
     'loggers': {
         'django': {
@@ -255,6 +302,11 @@ LOGGING = {
         },
         'engine' : {
             'handlers' : ['debug_file', 'engine_file'],
+            'level' : 'DEBUG',
+            'progatate' : False
+        },
+        'authApp' : {
+            'handlers' : ['debug_file', 'authApp_file'],
             'level' : 'DEBUG',
             'progatate' : False
         },

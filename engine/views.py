@@ -1,5 +1,6 @@
 # engine/views.py
 from django.conf import settings
+from django.shortcuts import get_object_or_404
 from rest_framework import (
     decorators,
     parsers,
@@ -17,15 +18,22 @@ from rest_framework import (
 import os, logging, base64
 
 from .serializers import NexusFileSerializer
-from .models import NexusFile
+from .models import NexusFile, NexusFilePagination
 
 logger = logging.getLogger(__name__)
 
-class NexusFileUploadAPIView(generics.CreateAPIView):
+class NexusFileListCreateAPIView(generics.ListCreateAPIView):
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     queryset = NexusFile.objects.all()
     serializer_class = NexusFileSerializer
-    permission_classes = [permissions.IsAuthenticated]  # Ensure only authenticated users can upload
+    pagination_class = NexusFilePagination
     parser_classes = [parsers.MultiPartParser, parsers.FormParser]  # Allow file uploads
+
+    def get_queryset(self):
+        username = self.request.GET.get('username', None)
+        if username:
+            return NexusFile.objects.filter(owner__username=username)  # Files of a specific user
+        return NexusFile.objects.all()  # Return all files if no user_id
 
     def perform_create(self, serializer):
 
@@ -40,87 +48,72 @@ class NexusFileUploadAPIView(generics.CreateAPIView):
         serializer.save(owner=self.request.user, model_file=model_file)  # Explicitly pass model_file
 
 
-class NexusFileDeleteAPIView(generics.DestroyAPIView):
-    permission_classes = [permissions.IsAuthenticated]  
+
+class NexusFileRetrieveDestroyAPIView(generics.RetrieveDestroyAPIView):
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]  
+    queryset = NexusFile.objects.all()
+    serializer_class = NexusFileSerializer
+    
 
     def get_object(self):
         """Retrieve the file by name and ensure the user owns it."""
         file_name = self.kwargs.get("file_name")  
         authenticated_user = self.request.user
-
-        try:
-            obj = NexusFile.objects.get(model_file = os.path.join('nexus_models', file_name))  
-        except NexusFile.DoesNotExist:
-            raise exceptions.NotFound("File not found.")
-        
-        if obj.owner != authenticated_user:
-            raise exceptions.PermissionDenied("You do not have permission to delete this file.")
-
+        obj = get_object_or_404(NexusFile, model_file = os.path.join('nexus_models', file_name))  
         return obj
 
+    def retrieve(self, request, *args, **kwargs):
+        """Handle GET request for NexusFile."""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        instance.add_view()
+        return response.Response(serializer.data)
 
-    def delete(self, request, *args, **kwargs):
+
+    def destroy(self, request, *args, **kwargs):
         """Handle DELETE request for NexusFile."""
         instance = self.get_object()
+        if instance.owner != request.user:
+            return response.Response({"error": f"You do not have permission to delete this file."}, status=status.HTTP_403_FORBIDDEN)
         self.perform_destroy(instance)
         return response.Response({"message": f"File '{str(instance)}' deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
 
-class FilePagination(pagination.PageNumberPagination):
-    page_size = 10  # Default number of items per page
-    page_size_query_param = 'page_size'  # Allows clients to set a custom page size
-    max_page_size = 100  # Maximum items per pages
 
-class NexusFileListAPIView(generics.ListAPIView):
-    permission_classes = [permissions.AllowAny]
-    queryset = NexusFile.objects.all()
-    serializer_class = NexusFileSerializer
-    pagination_class = FilePagination
 
-    def get_queryset(self):
-        username = self.kwargs.get("username", None)
-        if username:
-            return NexusFile.objects.filter(owner__username=username)  # Files of a specific user
-        return NexusFile.objects.all()  # Return all files if no user_id
+class NexusFileActionsAPIView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
 
-class NexusFileDownloadAPIView(generics.RetrieveAPIView):
-    queryset = NexusFile.objects.all()
-    serializer_class = NexusFileSerializer
-    permission_classes = [permissions.AllowAny]
-
-    def get_object(self):
+    def patch(self, request, *args, **kwargs):
+        """
+        {
+            "action": "like" | "dislike"
+        }
+        """
         file_name = self.kwargs.get("file_name")
-        name = os.path.join('nexus_models', file_name)
-        return self.queryset.get(model_file = name)
+        file_obj = get_object_or_404(NexusFile, model_file = os.path.join('nexus_models', file_name))
 
-@decorators.api_view(['PATCH'])
-@decorators.permission_classes([permissions.IsAuthenticated])
-def like_view(request, file_name):
+        action = request.data.get("action")
+        try:
+            assert action in self.action_map.keys()
+        except:
+            return response.Response({"error": f"Invalid action: {action}. Must be one of: {self.action_map.keys()}"}, status=status.HTTP_400_BAD_REQUEST)
 
-    obj = NexusFile.objects.get(model_file = os.path.join('nexus_models', file_name))
-
-    user = request.user # authenticated user
-    user.liked_files.add(obj)
+        self.action_map[action](file_obj, request.user)
+        return response.Response(status=status.HTTP_200_OK)
 
 
-    return response.Response({'return' : f'{user} liked {obj}.'}, status = status.HTTP_200_OK)  # Send as a real HTTP response.Response
+    @property
+    def action_map(self):
+        return {
+            "like": self._like,
+            "dislike": self._dislike
+        }
 
-@decorators.api_view(['PATCH'])
-@decorators.permission_classes([permissions.IsAuthenticated])
-def like_cancel_view(request, file_name):
+    def _like(self, file_obj, user):
+        file_obj.liked_users.add(user)
 
-    obj = NexusFile.objects.get(model_file = os.path.join('nexus_models', file_name))
-    user = request.user # authenticated user
-    user.liked_files.remove(obj)
+    def _dislike(self, file_obj, user):
+        file_obj.disliked_users.add(user)
 
-    return response.Response({'return' : f'{file_name} like canceld.'}, status = status.HTTP_200_OK)  # Send as a real HTTP response
 
-@decorators.api_view(['PATCH'])
-@decorators.permission_classes([permissions.AllowAny])
-def click_view(request, file_name):
-
-    obj = NexusFile.objects.get(model_file = os.path.join('nexus_models', file_name))
-    obj.views += 1
-    obj.save()
-    
-    return response.Response({'return' : f'{file_name} view count added.'}, status = status.HTTP_200_OK)  # Send as a real HTTP response
