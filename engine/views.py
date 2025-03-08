@@ -1,6 +1,8 @@
 # engine/views.py
 from django.conf import settings
+from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model
 from rest_framework import (
     decorators,
     parsers,
@@ -19,6 +21,7 @@ import os, logging, base64
 
 from .serializers import NexusFileSerializer
 from .models import NexusFile, NexusFilePagination
+from accounts.models import NexusUserRelation
 
 logger = logging.getLogger(__name__)
 
@@ -29,23 +32,39 @@ class NexusFileListCreateAPIView(generics.ListCreateAPIView):
     pagination_class = NexusFilePagination
     parser_classes = [parsers.MultiPartParser, parsers.FormParser]  # Allow file uploads
 
-    def get_queryset(self):
-        username = self.request.GET.get('username', None)
-        if username:
-            return NexusFile.objects.filter(owner__username=username)  # Files of a specific user
-        return NexusFile.objects.all()  # Return all files if no user_id
-
     def perform_create(self, serializer):
-
-        logger.debug(self.request.headers)
-        logger.debug(self.request.data)
-        
-
         model_file = self.request.FILES.get("model_file")  # Retrieve the uploaded file
         if not model_file:
             raise serializers.ValidationError({"model_file": "This field is required."})
+        serializer.save(owner=self.request.user, model_file=model_file)
 
-        serializer.save(owner=self.request.user, model_file=model_file)  # Explicitly pass model_file
+    def get_queryset(self):
+        """
+        Get the queryset for the NexusFileListCreateAPIView.
+        https://docs.djangoproject.com/en/5.1/topics/db/queries/#lookups-that-span-relationships
+        https://docs.djangoproject.com/en/5.1/topics/db/queries/#spanning-multi-valued-relationships
+        """
+        queryset = super().get_queryset() # get the default queryset
+
+        # exclude files that the user has blocked directly
+        # or files uploaded by users that the user has blocked
+        if self.request.user and self.request.user.is_authenticated:
+
+            # exclude files that the user has blocked
+            queryset = queryset.exclude(blocked_users=self.request.user) 
+
+            # exclude files uploaded by users that the user has blocked
+            blocked_users = self.request.user.relations_by_from_user.filter(
+                relation_type=NexusUserRelation.BLOCK
+            ).values_list('to_user', flat=True)
+            queryset = queryset.exclude(owner__in=blocked_users)
+
+        # username query parameter to filter files by owner
+        username = self.request.GET.get('username', None)
+        if username:
+            user = get_object_or_404(get_user_model(), username=username)
+            queryset = queryset.filter(owner=user)  # Files of a specific user
+        return queryset
 
 
 
@@ -84,36 +103,79 @@ class NexusFileRetrieveDestroyAPIView(generics.RetrieveDestroyAPIView):
 class NexusFileActionsAPIView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def patch(self, request, *args, **kwargs):
+    def patch(self, request, file_name:str, *args, **kwargs):
         """
         {
-            "action": "like" | "dislike"
+            "action": "like" | "dislike" | "block" | "report"
         }
         """
-        file_name = self.kwargs.get("file_name")
+        if request.data.get("action") not in self.action_map.keys():
+            return response.Response({"error": f"Invalid action: {request.data.get('action')}. Must be one of: {self.action_map.keys()}"}, status=status.HTTP_400_BAD_REQUEST)
+
         file_obj = get_object_or_404(NexusFile, model_file = os.path.join('nexus_models', file_name))
+        response_body = self.get_response_body( request, file_obj)
+        return response.Response(response_body, status=status.HTTP_200_OK)
 
+    def get_response_body(self, request, file_obj):
+        """
+        Get the response body for the NexusFileActionsAPIView.
+        """
         action = request.data.get("action")
-        try:
-            assert action in self.action_map.keys()
-        except:
-            return response.Response({"error": f"Invalid action: {action}. Must be one of: {self.action_map.keys()}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        self.action_map[action](file_obj, request.user)
-        return response.Response(status=status.HTTP_200_OK)
-
+        created = self.action_map[action](request, file_obj)
+        return {
+            "username": request.user.username,
+            "filename": file_obj.model_file.name,
+            "action": action,
+            "created": created
+        }
 
     @property
     def action_map(self):
         return {
             "like": self._like,
-            "dislike": self._dislike
+            "dislike": self._dislike,
+            "block": self._block,
+            "report": self._report
         }
 
-    def _like(self, file_obj, user):
-        file_obj.liked_users.add(user)
+    def _like(self, request, file_obj):
+        created = not file_obj.liked_users.filter(id=request.user.id).exists()
+        if created:
+            file_obj.liked_users.add(request.user)
+        else:
+            file_obj.liked_users.remove(request.user)
+        return created
 
-    def _dislike(self, file_obj, user):
-        file_obj.disliked_users.add(user)
+    def _dislike(self, request, file_obj):
+        created = not file_obj.disliked_users.filter(id=request.user.id).exists()
+        if created:
+            file_obj.disliked_users.add(request.user)
+        else:
+            file_obj.disliked_users.remove(request.user)
+        return created
 
+    def _block(self, request, file_obj):
+        created = not file_obj.blocked_users.filter(id=request.user.id).exists()
+        if created:
+            file_obj.blocked_users.add(request.user)
+        else:
+            file_obj.blocked_users.remove(request.user)
+        return created
+
+    def _report(self, request, file_obj):
+        created = not file_obj.reported_users.filter(id=request.user.id).exists()
+        if created:
+            file_obj.reported_users.add(request.user)
+            send_mail(  
+                subject=f"[File Report] {file_obj.model_file.name} reported by {request.user.username}", 
+                message=request.data.get('message', settings.EMAIL_DEFAULT_MESSSAGE),
+                from_email=settings.EMAIL_HOST_USER, 
+                recipient_list=[settings.EMAIL_HOST_USER],
+                fail_silently=False
+            )
+        else:
+            file_obj.reported_users.remove(request.user)
+
+
+        return created
 

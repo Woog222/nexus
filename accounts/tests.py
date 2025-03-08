@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import path, reverse
 from django.utils import timezone
+from django.core import mail
 from rest_framework.response import Response
 from rest_framework import (
     status, 
@@ -101,6 +102,7 @@ class NexusUserRetrieveTests(test.APITestCase):
         self.assertIn('follower_users', response.json())
         self.assertIn('blocked_users', response.json())
         self.assertIn('reported_users', response.json())
+        self.assertIn('files_uploaded', response.json())
 
 
     def test_get_user_profile_as_unauthenticated(self):
@@ -118,7 +120,7 @@ class NexusUserRetrieveTests(test.APITestCase):
         self.assertIn('follower_users', response.json())
         self.assertIn('blocked_users', response.json())
         self.assertIn('reported_users', response.json())
-
+        self.assertIn('files_uploaded', response.json())
 
 class NexusUserUpdateTests(test.APITestCase):
     """Test user creation and profile updates"""
@@ -404,14 +406,24 @@ class NexusUserRelationTests(test.APITestCase):
 
         response = self.client.post(follow_url, payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.json().get('message'), "fromuser followed touser.")
+        self.assertDictEqual(response.json(), {
+            "from_username": self.from_user.username,
+            "to_username": self.to_user.username,
+            "relation_type": "follow",
+            "created": True
+        })
         self.assertTrue(self.from_user.relations_by_from_user.filter(to_user=self.to_user, relation_type=NexusUserRelation.FOLLOW).exists())
         
-        # follow again
+        # follow again (cancel)
         response = self.client.post(follow_url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('error', response.json())
-
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertDictEqual(response.json(), {
+            "from_username": self.from_user.username,
+            "to_username": self.to_user.username,
+            "relation_type": "follow",
+            "created": False
+        })  
+        self.assertFalse(self.from_user.relations_by_from_user.filter(to_user=self.to_user, relation_type=NexusUserRelation.FOLLOW).exists())
 
 
     def test_block_user(self):
@@ -423,13 +435,24 @@ class NexusUserRelationTests(test.APITestCase):
 
         response = self.client.post(block_url, payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.json().get('message'), "fromuser blocked touser.")    
+        self.assertDictEqual(response.json(), {
+            "from_username": self.from_user.username,
+            "to_username": self.to_user.username,
+            "relation_type": "block",
+            "created": True
+        })
         self.assertTrue(self.from_user.relations_by_from_user.filter(to_user=self.to_user, relation_type=NexusUserRelation.BLOCK).exists())
 
         # block again
         response = self.client.post(block_url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('error', response.json())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertDictEqual(response.json(), {
+            "from_username": self.from_user.username,
+            "to_username": self.to_user.username,
+            "relation_type": "block",
+            "created": False
+        })  
+        self.assertFalse(self.from_user.relations_by_from_user.filter(to_user=self.to_user, relation_type=NexusUserRelation.BLOCK).exists())
 
     def test_report_user(self):
         """
@@ -438,15 +461,75 @@ class NexusUserRelationTests(test.APITestCase):
         reporter = self.from_user
         malicious_user = self.to_user
         self.client.force_authenticate(user=reporter)
-
-        payload = {
-            'relation_type': 'report'
-        }
         report_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': malicious_user.username})
-        response = self.client.post(report_url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.json().get('message'), f"{reporter.username} reported {malicious_user.username}.")
 
+        # 1st report
+        response = self.client.post(
+            path = report_url, 
+            data = {
+                'relation_type': 'report',
+                'message': 'test message'
+            }, 
+            format='json'
+        )
+        logger.debug(f"1st report : \n{response.json()}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertDictEqual(response.json(), {
+            "from_username": reporter.username,
+            "to_username": malicious_user.username,
+            "relation_type": "report",
+            "created": True
+        })
+        self.assertTrue(reporter.relations_by_from_user.filter(to_user=malicious_user, relation_type=NexusUserRelation.REPORT).exists())
+        
+        # email check
+        logger.debug(mail.outbox[0].body)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, f"[User Report] {malicious_user.username} reported by {reporter.username}")    
+        self.assertEqual(mail.outbox[0].body, 'test message')
+        self.assertEqual(mail.outbox[0].from_email, settings.EMAIL_HOST_USER)
+        self.assertEqual(mail.outbox[0].to, [settings.EMAIL_HOST_USER])
+
+
+        # cancel the report
+        response = self.client.post(
+            path = report_url, 
+            data = {'relation_type': 'report'},
+            format='json'
+        )
+        logger.debug(f"cancel the report : \n{response.json()}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertDictEqual(response.json(), {
+            "from_username": reporter.username,
+            "to_username": malicious_user.username,
+            "relation_type": "report",
+            "created": False
+        })
+        self.assertFalse(reporter.relations_by_from_user.filter(to_user=malicious_user, relation_type=NexusUserRelation.REPORT).exists())
+
+        # report again (no message)
+        mail.outbox = [] # empty the mail outbox
+        response = self.client.post(
+            path = report_url, 
+            data = {'relation_type': 'report'},  # no message
+            format='json'
+        )
+        logger.debug(f"2nd report : \n{response.json()}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertDictEqual(response.json(), {
+            "from_username": reporter.username,
+            "to_username": malicious_user.username,
+            "relation_type": "report",
+            "created": True
+        })
+
+        # email check
+        logger.debug(mail.outbox)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, f"[User Report] {malicious_user.username} reported by {reporter.username}")    
+        self.assertEqual(mail.outbox[0].body, settings.EMAIL_DEFAULT_MESSSAGE)
+        self.assertEqual(mail.outbox[0].from_email, settings.EMAIL_HOST_USER)
+        self.assertEqual(mail.outbox[0].to, [settings.EMAIL_HOST_USER])
 
     def test_invalid_relation_type(self):
         """Test invalid relation type"""
@@ -513,7 +596,13 @@ class NexusUserComprehensiveAPITests(test.APITestCase):
             self.client.force_authenticate(user=self.users[i])
             response = self.client.post(follow_url, payload, format='json')
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertEqual(response.json().get('message'), f"{self.users[i].username} followed {self.users[0].username}.")
+            self.assertDictEqual(response.json(), {
+                "from_username": self.users[i].username,
+                "to_username": self.users[0].username,
+                "relation_type": "follow",
+                "created": True
+            })
+            self.assertTrue(self.users[i].relations_by_from_user.filter(to_user=self.users[0], relation_type=NexusUserRelation.FOLLOW).exists())
 
         follower_users_url = f"{reverse('user-relation', kwargs={'username': self.users[0].username})}?relation_type=follower_users"
         response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.users[0].username}))
@@ -540,7 +629,13 @@ class NexusUserComprehensiveAPITests(test.APITestCase):
             self.client.force_authenticate(user=self.users[0])
             response = self.client.post(follow_url, payload, format='json')
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertEqual(response.json().get('message'), f"{self.users[0].username} followed {self.users[i].username}.")
+            self.assertDictEqual(response.json(), {
+                "from_username": self.users[0].username,
+                "to_username": self.users[i].username,
+                "relation_type": "follow",
+                "created": True
+            })
+            self.assertTrue(self.users[0].relations_by_from_user.filter(to_user=self.users[i], relation_type=NexusUserRelation.FOLLOW).exists())
 
         following_users_url = f"{reverse('user-relation', kwargs={'username': self.users[0].username})}?relation_type=following_users"
         response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.users[0].username}))
@@ -568,7 +663,13 @@ class NexusUserComprehensiveAPITests(test.APITestCase):
             self.client.force_authenticate(user=self.users[0])
             response = self.client.post(block_url, payload, format='json')
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertEqual(response.json().get('message'), f"{self.users[0].username} blocked {self.users[i].username}.")
+            self.assertDictEqual(response.json(), {
+                "from_username": self.users[0].username,
+                "to_username": self.users[i].username,
+                "relation_type": "block",
+                "created": True
+            })
+            self.assertTrue(self.users[0].relations_by_from_user.filter(to_user=self.users[i], relation_type=NexusUserRelation.BLOCK).exists())
 
         blocked_users_url = f"{reverse('user-relation', kwargs={'username': self.users[0].username})}?relation_type=blocked_users"
         response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.users[0].username}))
@@ -595,7 +696,13 @@ class NexusUserComprehensiveAPITests(test.APITestCase):
             self.client.force_authenticate(user=self.users[0])
             response = self.client.post(report_url, payload, format='json')
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertEqual(response.json().get('message'), f"{self.users[0].username} reported {self.users[i].username}.")
+            self.assertDictEqual(response.json(), {
+                "from_username": self.users[0].username,
+                "to_username": self.users[i].username,
+                "relation_type": "report",
+                "created": True
+            })
+            self.assertTrue(self.users[0].relations_by_from_user.filter(to_user=self.users[i], relation_type=NexusUserRelation.REPORT).exists())
 
         reported_users_url = f"{reverse('user-relation', kwargs={'username': self.users[0].username})}?relation_type=reported_users"
         response = self.client.get(reverse(USER_DETAIL_URL_NAME, kwargs={'username': self.users[0].username}))

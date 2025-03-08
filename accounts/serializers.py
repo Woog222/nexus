@@ -21,6 +21,7 @@ class NexusUserSerializer(serializers.ModelSerializer):
     follower_users = serializers.SerializerMethodField()
     blocked_users = serializers.SerializerMethodField()
     reported_users = serializers.SerializerMethodField()
+    files_uploaded = serializers.SerializerMethodField()
     
 
     class Meta:
@@ -36,7 +37,8 @@ class NexusUserSerializer(serializers.ModelSerializer):
             'following_users', 
             'follower_users', 
             'blocked_users',
-            'reported_users'
+            'reported_users',
+            'files_uploaded',
         )
         read_only_fields = (
             'username', 
@@ -46,7 +48,8 @@ class NexusUserSerializer(serializers.ModelSerializer):
             'following_users', 
             'follower_users', 
             'blocked_users', 
-            'reported_users'
+            'reported_users',
+            'files_uploaded',
         )
         extra_kwargs = {
             'nickname': {'required': True},
@@ -84,6 +87,11 @@ class NexusUserSerializer(serializers.ModelSerializer):
         return f"{absolute_url}?{query_string}"
         # return [{"url": relation.to_user.get_absolute_url()} for relation in obj.relations_by_from_user.filter(relation_type=NexusUserRelation.REPORT)]
 
+    def get_files_uploaded(self, obj):
+        request = self.context.get('request')
+        absolute_url = request.build_absolute_uri(reverse('nexusfile-list-create'))
+        query_string = f"username={obj.username}"
+        return f"{absolute_url}?{query_string}"
 
 
     @staticmethod

@@ -78,7 +78,7 @@ class NexusUserRelationView(generics.GenericAPIView):
         """
         return ['follower_users', 'following_users', 'blocked_users', 'reported_users']
 
-    def get_queryset(self, user, relation_type:str):
+    def get_queryset(self, user, relation_type:str, **kwargs):
         """
         Get queryset for the relation type
         """
@@ -118,7 +118,7 @@ class NexusUserRelationView(generics.GenericAPIView):
         user = get_object_or_404(get_user_model(), username=username)
         relation_type = request.GET.get('relation_type', None)
         try:
-           queryset = self.get_queryset(user, relation_type)
+           queryset = self.get_queryset(user, relation_type, **kwargs)
         except AssertionError:
             return Response({"error": f"Invalid Query parameter 'relation_type' ({relation_type}). Must be {self.allowed_relation_types_for_lookup}"}, status=status.HTTP_400_BAD_REQUEST)
   
@@ -131,38 +131,60 @@ class NexusUserRelationView(generics.GenericAPIView):
 
     def post(self, request, username:str, **kwargs):
         """
-        Block OR Follow a user
+        Block, Follow, Report a user
         """
+
+        # relation_type validation
         try:
             # ['follow', 'block', 'report']
             relation_type = request.data.get('relation_type', None)
             assert relation_type in self.allowed_relation_types_for_setup
         except AssertionError:
-            return Response({
-                "error": f"Invalid 'relation type' ({relation_type}). Must be {self.allowed_relation_types_for_setup}"}, 
+            return Response(
+                {
+                "error": f"Invalid 'relation type' ({relation_type}). Must be {self.allowed_relation_types_for_setup}"
+                }, 
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # from_user, to_user validation
         from_user = request.user
         to_user = get_object_or_404(get_user_model(), username=username)
         if from_user == to_user:
-            return Response({"error": "You cannot follow or block yourself."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "You cannot follow or block yourself."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Create or Cancel the relation
+        rel, created = NexusUserRelation.objects.get_or_create(
+            from_user=from_user,
+            to_user=to_user,
+            relation_type=relation_type.upper()[0]
+        )
+        if not created: rel.delete() # cancel the relation
             
-        try:
-            from_user.relations_by_from_user.create(to_user=to_user, relation_type=relation_type.upper()[0])
-        except IntegrityError as e:
-            return Response({"error": e.args[0]}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if relation_type == 'report':
+
+        # send email (report)
+        if created and relation_type == 'report':
+            logger.debug(f"send email (report) : \n{request.data}")
+            logger.debug(f" {getattr(request.data, 'message', settings.EMAIL_DEFAULT_MESSSAGE)}")
             send_mail(  
                 subject=f"[User Report] {to_user.username} reported by {from_user.username}", 
-                message=getattr(request.data, 'message', 'message body is missing'),
+                message= request.data.get('message', settings.EMAIL_DEFAULT_MESSSAGE),
                 from_email=settings.EMAIL_HOST_USER, 
                 recipient_list=[settings.EMAIL_HOST_USER],
                 fail_silently=False
             )
+        
+        return Response(
+            {
+                "from_username": from_user.username,
+                "to_username": to_user.username,
+                "relation_type": relation_type,
+                "created": created
+            }, 
+            status=status.HTTP_200_OK
+        )
 
-        return Response({"message": f"{from_user.username} {relation_type}ed {to_user.username}."}, status=status.HTTP_200_OK)
+
 
 
 

@@ -26,7 +26,7 @@ class NexusFile(models.Model):
     liked_users = models.ManyToManyField(get_user_model(), related_name='liked_files')
     disliked_users = models.ManyToManyField(get_user_model(), related_name='disliked_files')
     blocked_users = models.ManyToManyField(get_user_model(), related_name='blocked_files')
-
+    reported_users = models.ManyToManyField(get_user_model(), related_name='reported_files')
     class Meta:
         ordering = ['-views']
 
@@ -38,8 +38,11 @@ class NexusFile(models.Model):
         self.save(update_fields=['views'])
         self.refresh_from_db()
 
+    def get_file_name(self):
+        return os.path.basename(self.model_file.name)
+
     def __str__(self):
-        return f"{os.path.basename(self.model_file.name)}"
+        return f"{self.get_file_name()}"
 
 @receiver(post_delete, sender=NexusFile)
 def delete_nexus_file(sender, instance, **kwargs):

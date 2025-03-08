@@ -2,8 +2,10 @@
 from rest_framework import serializers
 from .models import NexusFile
 from django.urls import reverse
-
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 class NexusFileSerializer(serializers.ModelSerializer):
     owner = serializers.SerializerMethodField()  # Custom field for owner
@@ -22,7 +24,7 @@ class NexusFileSerializer(serializers.ModelSerializer):
         return absolute_url
 
     def get_file_name(self, obj):
-        return os.path.basename(obj.model_file.name)
+        return obj.get_file_name()
 
     def get_likes(self, obj):
         return obj.liked_users.all().count()
