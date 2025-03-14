@@ -10,7 +10,7 @@ JWT (django-rest-framework-simplejwt)
 """
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')  
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=10),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -139,7 +139,7 @@ SOCIALACCOUNT_PROVIDERS = {
                 "key": os.getenv("APPLE_TEAM_ID"),
                 "settings": {
                     "certificate_key": open("authApp/private/apple_authkey.p8", "r").read(),
-                     "hidden" : True,
+                    "hidden" : True,
                 }
             }
         ]

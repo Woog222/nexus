@@ -22,7 +22,7 @@ class NexusUserSerializer(serializers.ModelSerializer):
     blocked_users = serializers.SerializerMethodField()
     reported_users = serializers.SerializerMethodField()
     files_uploaded = serializers.SerializerMethodField()
-    
+    liked_files = serializers.SerializerMethodField()
 
     class Meta:
         model = UserModel
@@ -39,6 +39,7 @@ class NexusUserSerializer(serializers.ModelSerializer):
             'blocked_users',
             'reported_users',
             'files_uploaded',
+            'liked_files'
         )
         read_only_fields = (
             'username', 
@@ -50,6 +51,7 @@ class NexusUserSerializer(serializers.ModelSerializer):
             'blocked_users', 
             'reported_users',
             'files_uploaded',
+            'liked_files'
         )
         extra_kwargs = {
             'nickname': {'required': True},
@@ -91,6 +93,12 @@ class NexusUserSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         absolute_url = request.build_absolute_uri(reverse('nexusfile-list-create'))
         query_string = f"username={obj.username}"
+        return f"{absolute_url}?{query_string}"
+
+    def get_liked_files(self, obj):
+        request = self.context.get('request')
+        absolute_url = request.build_absolute_uri(reverse('nexusfile-list-create'))
+        query_string = f"liked_user_name={obj.username}"
         return f"{absolute_url}?{query_string}"
 
 

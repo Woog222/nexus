@@ -46,6 +46,9 @@ class NexusFileListCreateAPIView(generics.ListCreateAPIView):
         """
         queryset = super().get_queryset() # get the default queryset
 
+        """
+        Filtering based on blocked users and blocked files
+        """
         # exclude files that the user has blocked directly
         # or files uploaded by users that the user has blocked
         if self.request.user and self.request.user.is_authenticated:
@@ -59,11 +62,24 @@ class NexusFileListCreateAPIView(generics.ListCreateAPIView):
             ).values_list('to_user', flat=True)
             queryset = queryset.exclude(owner__in=blocked_users)
 
+        """
+        Filtering based on username query parameter (owner)
+        """
         # username query parameter to filter files by owner
         username = self.request.GET.get('username', None)
         if username:
             user = get_object_or_404(get_user_model(), username=username)
             queryset = queryset.filter(owner=user)  # Files of a specific user
+
+        """
+        Filtering based on liked files
+        """
+        # username query parameter to filter files by owner
+        liked_user_name = self.request.GET.get('liked_user_name', None)
+        if liked_user_name:
+            user = get_object_or_404(get_user_model(), username=liked_user_name)
+            queryset = queryset.filter(liked_users=user)  # Files of a specific user
+
         return queryset
 
 

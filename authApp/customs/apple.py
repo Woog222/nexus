@@ -77,6 +77,10 @@ class CustomAppleLoginSerializer(SocialLoginSerializer):
         logger.debug(f"token: {token.user_data.keys()}")
         logger.debug(f"sub: {sub}")
         logger.debug(f"email: {email}")
+        logger.debug(f"social_login.state: {getattr(social_login, 'state')}")
+
+        logger.debug(f"social_login.user: {social_login.user}")
+        logger.debug(f"social_login.is_existing: {social_login.is_existing}")
         if sub:
             socialaccount_adapter.populate_user(
                 request = self._get_request(),
@@ -86,6 +90,10 @@ class CustomAppleLoginSerializer(SocialLoginSerializer):
                     "email" : email,
                 }
             )
+        logger.debug(f"social_login.is_existing: {social_login.is_existing}")    
+        logger.debug(f"social_login.user: {social_login.user}")
+        logger.debug(f"social_login.is_headless: {social_login.is_headless}")
+        logger.debug(f"social_login.state.process  :{social_login.state.get("process")}")
         return social_login
 
 

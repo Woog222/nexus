@@ -525,4 +525,44 @@ class NexusFileWithUserTests(test.APITestCase):
         file_names_viewer_got = [file["file_name"] for file in response.data["results"]]
         self.assertListEqual(file_names_viewer_got, file_names_expected)
         
-        
+    
+    def test_get_liked_files(self):
+        """Test getting liked files."""
+
+        # uploader1 uploads 5 files
+        self.client.force_authenticate(user=self.uploader1)
+        for i in range(5):
+            test_file = SimpleUploadedFile(f"{i}_uploader1_test_model.obj", b"dummy content", content_type="text/plain")   
+            self.client.post(reverse('nexusfile-list-create'), data = {"model_file": test_file}, format="multipart")
+            self.assertEqual(NexusFile.objects.filter(owner=self.uploader1).count(), i + 1)
+
+        # Get filenames of the uploaded files
+        response = self.client.get(f"{reverse('nexusfile-list-create')}?username={self.uploader1.username}")
+        file_names_by_uploader1 = [file["file_name"] for file in response.data["results"]]
+
+
+
+        # uploader2 likes 3 files uploaded by uploader1
+        self.client.force_authenticate(user=self.uploader2)
+        liked_files = file_names_by_uploader1[:3]
+        for file_name in liked_files:
+            response = self.client.patch(
+                path = reverse('nexusfile-actions', kwargs={'file_name': file_name}), 
+                data = {'action': 'like'},
+                format = 'json'
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # get user profile of uploader2
+        self.client.force_authenticate(user=self.uploader2)
+        response = self.client.get(reverse('user-detail', kwargs={'username': self.uploader2.username}))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        liked_files_url = response.data['liked_files']
+        response = self.client.get(liked_files_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 3)
+        logger.debug(response.data)
+
+        for liked_file in response.data['results']:
+            self.assertIn(liked_file['file_name'], liked_files)
