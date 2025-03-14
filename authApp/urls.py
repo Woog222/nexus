@@ -5,6 +5,7 @@ from dj_rest_auth.registration.views import VerifyEmailView
 from .views import AppleLoginView, AppleLoginView_TEMP
 
 urlpatterns = [
+    path('django-allauth/', include('allauth.urls')),
     path('', include('dj_rest_auth.urls')),
     path('apple/callback/', AppleLoginView.as_view(), name='apple-callback'),
     path('apple/login/', AppleLoginView_TEMP.as_view(), name='apple-login'),

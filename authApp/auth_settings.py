@@ -10,7 +10,7 @@ JWT (django-rest-framework-simplejwt)
 """
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')  
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=10),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -97,7 +97,7 @@ APPLE_REDIRECT_URI = "https://www.cvan.shop/auth/apple/callback/"
 APPLE_PUBLIC_KEY_URL = "https://appleid.apple.com/auth/keys"
 APPLE_TOKEN_URL = "https://appleid.apple.com/auth/token"
 
-APPLE_USER_ID_PREFIX = "APPLE" # user id : {prefix}_{apple_sub}
+APPLE_USERNAME_PREFIX = "APPLE" # user id : {prefix}__{apple_sub}
 
 """
 django-allauth
