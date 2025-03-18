@@ -37,6 +37,7 @@ class NexusFileListCreateAPIView(generics.ListCreateAPIView):
         if not model_file:
             raise serializers.ValidationError({"model_file": "This field is required."})
         serializer.save(owner=self.request.user, model_file=model_file)
+        logger.info(f"[file create] {serializer.data}")
 
     def get_queryset(self):
         """
@@ -130,6 +131,7 @@ class NexusFileActionsAPIView(generics.GenericAPIView):
 
         file_obj = get_object_or_404(NexusFile, model_file = os.path.join('nexus_models', file_name))
         response_body = self.get_response_body( request, file_obj)
+        logger.info(f"[file action] {response_body}")
         return response.Response(response_body, status=status.HTTP_200_OK)
 
     def get_response_body(self, request, file_obj):

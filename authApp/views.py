@@ -25,7 +25,6 @@ class AppleLoginView(SocialLoginView):
     serializer_class = CustomAppleLoginSerializer
 
     def post(self, request, *args, **kwargs):
-        logger.debug(request.data)
         try:
             return super().post(request, *args, **kwargs)
         except Exception as e:

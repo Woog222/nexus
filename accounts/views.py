@@ -46,6 +46,8 @@ class NexusUserDetailView(generics.RetrieveUpdateAPIView):
     def update(self, request, *args, **kwargs):
         if request.user.username != self.kwargs.get('username'):
             return Response({"error": "You are not allowed to update this user."}, status=status.HTTP_403_FORBIDDEN)
+
+        logger.info(f"[user update] for {request.user}\n{request.data}")
         return super().update(request, *args, **kwargs)
     
 
@@ -173,14 +175,17 @@ class NexusUserRelationView(generics.GenericAPIView):
                 recipient_list=[settings.EMAIL_HOST_USER],
                 fail_silently=False
             )
-        
+
+    
+        response_data = {
+            "from_username": from_user.username,
+            "to_username": to_user.username,
+            "relation_type": relation_type,
+            "created": created
+        }
+        logger.info(f"[user relation]\n{response_data}")
         return Response(
-            {
-                "from_username": from_user.username,
-                "to_username": to_user.username,
-                "relation_type": relation_type,
-                "created": created
-            }, 
+            response_data,
             status=status.HTTP_200_OK
         )
 

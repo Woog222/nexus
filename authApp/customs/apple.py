@@ -14,49 +14,8 @@ logger = logging.getLogger(__name__)
 
 class CustomAppleLoginSerializer(SocialLoginSerializer):
     def validate(self, attrs):
-        logger.debug(attrs)
-
-        ###################### CUSTOM CODE ######################
-
-        # view = self.context.get('view')
-        # request = self._get_request()
-        # adapter_class = getattr(view, 'adapter_class', None)
-        # adapter = adapter_class(request)
-        # app = adapter.get_app(request)
-
-        # code = attrs.get("code")
-        # if not code:
-        #     logger.debug("code is not found")
-        
-        #     self.set_callback_url(view=view, adapter_class=adapter_class)
-        #     self.client_class = getattr(view, 'client_class', None)
-
-        # if not self.client_class:
-        #     raise serializers.ValidationError(
-        #         _('Define client_class in view'),
-        #     )
-
-        # provider = adapter.get_provider()
-        # scope = provider.get_scope_from_request(request)
-        # client = self.client_class(
-        #     request,
-        #     app.client_id,
-        #     app.secret,
-        #     adapter.access_token_method,
-        #     adapter.access_token_url,
-        #     self.callback_url,
-        #     scope,
-        #     scope_delimiter=adapter.scope_delimiter,
-        #     headers=adapter.headers,
-        #     basic_auth=adapter.basic_auth,
-        # )
-        # token = client.get_access_token(code)
-        # logger.debug(token)
-
-        ##########################################################
-        
         attrs = super().validate(attrs)
-        logger.debug(attrs)
+        logger.info(f"[user login] {attrs.get('user')}")
         return attrs
 
     def get_social_login(self, adapter, app, token, response):
@@ -74,13 +33,18 @@ class CustomAppleLoginSerializer(SocialLoginSerializer):
 
         sub = getattr(token, "user_data").get("sub")
         email = getattr(token, "user_data").get("email")
-        logger.debug(f"token: {token.user_data.keys()}")
-        logger.debug(f"sub: {sub}")
-        logger.debug(f"email: {email}")
-        logger.debug(f"social_login.state: {getattr(social_login, 'state')}")
+        info_dict = {
+            'sub' : sub,
+            'email' : email,
+            'token_keys' : token.user_data.keys(),
+            'social_login' : social_login,
+            'social_login.user' : social_login.user,
+            'social_login.is_existing' : social_login.is_existing,
+            'social_login.is_headless' : social_login.is_headless,
+            'social_login.state.process' : social_login.state.get("process"),
+        }
 
-        logger.debug(f"social_login.user: {social_login.user}")
-        logger.debug(f"social_login.is_existing: {social_login.is_existing}")
+        logger.info(f"[get_social_login] \n{info_dict}")
         if sub:
             socialaccount_adapter.populate_user(
                 request = self._get_request(),
@@ -90,19 +54,16 @@ class CustomAppleLoginSerializer(SocialLoginSerializer):
                     "email" : email,
                 }
             )
-        logger.debug(f"social_login.is_existing: {social_login.is_existing}")    
-        logger.debug(f"social_login.user: {social_login.user}")
-        logger.debug(f"social_login.is_headless: {social_login.is_headless}")
-        logger.debug(f"social_login.state.process  :{social_login.state.get("process")}")
+        logger.info(f"[get_social_login] social_login.user(after populate_user): {social_login.user}")    
         return social_login
 
 
 class CustomAppleOAuth2Adapter(AppleOAuth2Adapter):
     def parse_token(self, data):
-        logger.debug(data)
+        logger.debug(f"[parse_token] data: {data}")
         token = super().parse_token(data)  # Calls parent class's method
-
         return token
+
 class CustomAppleOAuth2Client(AppleOAuth2Client):
 
     def get_access_token(self, *args, **kwargs):

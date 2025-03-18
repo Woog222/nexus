@@ -16,11 +16,9 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
 
 
         u = sociallogin.user
-        logger.debug(f"[save_user] sociallogin.user(before) : {u}")
-
-        ret = super().save_user(request, social_login, form)
         
 
-        logger.debug(f"[save_user] sociallogin.user(after) : {ret}")
+        ret = super().save_user(request, sociallogin, form)
+        logger.info(f"[Signup (DefaultSocialAccountAdapter.save_user)] created user:\n{u}")
 
         return ret

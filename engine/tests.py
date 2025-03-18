@@ -345,6 +345,9 @@ class NexusFileWithUserTests(test.APITestCase):
 
 
     def tearDown(self):
+        self.uploader1.delete()
+        self.uploader2.delete()
+        self.viewer.delete()
         logger.debug(f"\n\n-----------------------------{self._testMethodName}-----------------------------\n\n")
 
     def test_download_files_of_owner(self):

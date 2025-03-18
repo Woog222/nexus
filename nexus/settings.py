@@ -49,7 +49,7 @@ SECRET_KEY = 'django-insecure-f13z&4z(*01gzk!v!e29c9#3z%6#sfd@^193-fkl((a&(1hq7d
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
     '.cvan.shop',
