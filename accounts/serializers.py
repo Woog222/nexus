@@ -139,12 +139,13 @@ class NexusUserSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         """Handle profile image update correctly"""
 
-        logger.info(f"Updating {instance.profile_image.name}")    
+        
         new_image = validated_data.get("profile_image", None)
         if new_image and instance.profile_image and instance.profile_image.name != "user_profile_images/default_profile.jpg":  
             instance.profile_image.delete(save=False)  # Delete old image only if a new one is provided
 
         ret = super().update(instance, validated_data)
+        logger.info(f"[user update({instance.username})] {validated_data} updated")    
         return ret
 
 

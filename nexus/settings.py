@@ -277,7 +277,7 @@ LOGGING = {
             'formatter': 'standard',
         },
         'authApp_file': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             #'filters': ['require_debug_true'],
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': BASE_DIR / 'logs/authApp.log',
@@ -298,17 +298,17 @@ LOGGING = {
         },
         'accounts' : {
             'handlers' : ['debug_file', 'accounts_file'],
-            'level' : 'DEBUG',
+            'level' : 'INFO',
             'progatate' : False
         },
         'engine' : {
             'handlers' : ['debug_file', 'engine_file'],
-            'level' : 'DEBUG',
+            'level' : 'INFO',
             'progatate' : False
         },
         'authApp' : {
             'handlers' : ['debug_file', 'authApp_file'],
-            'level' : 'DEBUG',
+            'level' : 'INFO',
             'progatate' : False
         },
     }
