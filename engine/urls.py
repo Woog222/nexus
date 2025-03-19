@@ -8,7 +8,7 @@ from .views import (
 
 urlpatterns = [
 
-    # query parameter: username (optional), liked_user_name (optional)
+    # query parameter: owner (optional), liked_user (optional)
     path("files/", NexusFileListCreateAPIView.as_view(), name="nexusfile-list-create"), 
     path('files/<str:file_name>/', NexusFileRetrieveDestroyAPIView.as_view(), name="nexusfile-detail"),
     path('files/<str:file_name>/actions/', NexusFileActionsAPIView.as_view(), name="nexusfile-actions"),
