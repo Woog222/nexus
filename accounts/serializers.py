@@ -92,13 +92,13 @@ class NexusUserSerializer(serializers.ModelSerializer):
     def get_files_uploaded(self, obj):
         request = self.context.get('request')
         absolute_url = request.build_absolute_uri(reverse('nexusfile-list-create'))
-        query_string = f"username={obj.username}"
+        query_string = f"owner={obj.username}"
         return f"{absolute_url}?{query_string}"
 
     def get_liked_files(self, obj):
         request = self.context.get('request')
         absolute_url = request.build_absolute_uri(reverse('nexusfile-list-create'))
-        query_string = f"liked_user_name={obj.username}"
+        query_string = f"liked_user={obj.username}"
         return f"{absolute_url}?{query_string}"
 
 

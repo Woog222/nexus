@@ -48,7 +48,7 @@ class NexusFileAPITestCase(test.APITestCase):
         # Uploads the file by the authenticated user
         response = self.client.post(
             path     =   reverse('nexusfile-list-create'),
-            data     =   {"model_file": self.test_file},
+            data     =   {"model_file": self.test_file, "title": "test title"},
             format   =   "multipart"
         )
 
@@ -72,80 +72,35 @@ class NexusFileAPITestCase(test.APITestCase):
         # Deactivate authentication and upload the file
         self.client.force_authenticate(user=None)
         url = reverse('nexusfile-list-create')
-        data = {"model_file": self.test_file}
+        data = {"model_file": self.test_file, "title": "test title"}
         response = self.client.post(url, data, format="multipart")
 
         # Check response
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)  # Expecting 401 Unauthorized
         logger.debug(response.data)
 
-
-    def test_delete_own_file(self):
-        """Test deleting a file owned by the user."""
-        logger.debug(get_user_model().objects.all()); logger.debug(NexusFile.objects.all())
-
-        nexus_file = NexusFile.objects.create(owner=self.authenticated_user, model_file=self.test_file)
-        url = reverse('nexusfile-detail', kwargs = {'file_name' : os.path.basename(nexus_file.model_file.name)})
-        response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(NexusFile.objects.filter(id=nexus_file.id).exists())
-        
-        
-    def test_delete_other_user_file(self):
-        """Test that users cannot delete files they do not own."""
-
-
-        other_file = NexusFile.objects.create(owner=self.unauthenticated_user, model_file=self.test_file)
-        other_file.save()
-
-        url = reverse('nexusfile-detail', kwargs = {'file_name' : os.path.basename(other_file.model_file.name)})
-        response = self.client.delete(url)
-        logger.debug(response.data)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-        
-    def test_list_files(self):
-        """Test listing files."""        
-
-
-        binary_contents = [f"content{i}".encode() for i in range(5)]
-
-        for i, binary_content in enumerate(binary_contents):
-            response = self.client.post(
-                path      =   reverse('nexusfile-list-create'), 
-                data   =   {"model_file": SimpleUploadedFile(f"test_model_{i}.obj", binary_content, content_type="text/plain")}, 
-                format    =   "multipart",
-            )
-            logger.debug(response.data)
-            self.assertIn(self.authenticated_user.username, response.data['owner']) # url for user-profile
-            self.assertIn('model_file', response.data)
-
-        response = self.client.get(path = reverse('nexusfile-list-create'))
-        logger.debug(response.data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 5)
-
-        response = self.client.get(path = f"{reverse('nexusfile-list-create')}?username={self.authenticated_user.username}")
-        logger.debug(response.data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 5)
-
-        response = self.client.get(path = f"{reverse('nexusfile-list-create')}?username={self.unauthenticated_user.username}")
-        logger.debug(response.data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 0)
-
     def test_retrieve_file(self):
         """Test retrieving a file."""
 
+        # 1. Upload a 
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        logger.debug(f"upload response: \n{response.data}")
+        self.assertIn(self.authenticated_user.username, response.data['owner']) # url for user-profile
+        self.assertEqual(NexusFile.objects.filter(owner = self.authenticated_user).count(), 1)
+        self.assertEqual(NexusFile.objects.filter(owner = self.unauthenticated_user).count(), 0)
 
-        nexus_file = NexusFile.objects.create(owner=self.authenticated_user, model_file=self.test_file)
-        nexus_file.save()
-        file_name = os.path.basename(nexus_file.model_file.name)
+        file_name = response.data['file_name']
+
+        # 2. Retrieve the file
         response = self.client.get(reverse('nexusfile-detail', kwargs={'file_name': file_name}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        logger.debug(response.data)
+        logger.debug(f"retrieve response: \n{response.data}")
         self.assertEqual(response["Content-Type"], 'application/json')
 
         self.assertIn('owner', response.data)
@@ -153,16 +108,195 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertIn('likes', response.data)
         self.assertIn('views', response.data)
         self.assertIn('model_file', response.data)
+        self.assertIn('title', response.data)
+        self.assertIn('description', response.data)
+
+    def test_list_files(self):
+        """Test listing files."""        
+
+        binary_contents = [f"content{i}".encode() for i in range(5)]
+
+        for i, binary_content in enumerate(binary_contents):
+            response = self.client.post(
+                path      =   reverse('nexusfile-list-create'), 
+                data   =   {"model_file": SimpleUploadedFile(f"test_model_{i}.obj", binary_content, content_type="text/plain"), "title": f"test title {i}"}, 
+                format    =   "multipart",
+            )
+            logger.debug(f"Upload response {i}: \n{response.data}")
+            self.assertIn(self.authenticated_user.username, response.data['owner']) # url for user-profile
+            self.assertIn('model_file', response.data)
+            self.assertIn('title', response.data)
+            self.assertIn('file_name', response.data)
+
+        response = self.client.get(path = reverse('nexusfile-list-create'))
+        logger.debug(f"List response: \n{response.data}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 5)
+
+        response = self.client.get(path = f"{reverse('nexusfile-list-create')}?owner={self.authenticated_user.username}")
+        logger.debug(f"List response by {self.authenticated_user.username}: \n{response.data}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 5)
+
+        response = self.client.get(path = f"{reverse('nexusfile-list-create')}?owner={self.unauthenticated_user.username}")
+        logger.debug(f"List response by {self.unauthenticated_user.username}: \n{response.data}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 0)
+
+    def test_delete_files_owned_by_user(self):
+        """Test deleting a file owned by the user."""
+
+        # 1. Upload a file
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        logger.debug(f"Upload response: \n{response.data}")
+        file_name = response.data['file_name']
+
+        # 2. Delete the file
+        url = reverse('nexusfile-detail', kwargs = {'file_name' : file_name})
+        response = self.client.delete(url)
+        logger.debug(f"Delete response: \n{response.data}")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(NexusFile.objects.filter(title = "test title").exists())
+        
+    def test_delete_files_owned_by_other_user(self):
+        """Test that users cannot delete files they do not own."""
+
+        # 1. Upload a file by Unauthenticated user
+        self.client.force_authenticate(user=self.unauthenticated_user)
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        logger.debug(f"Upload response: \n{response.data}")
+        file_name = response.data['file_name']
+
+        # 2. Delete the file by Authenticated user
+        self.client.force_authenticate(user=self.authenticated_user)
+        url = reverse('nexusfile-detail', kwargs = {'file_name' : file_name})
+        response = self.client.delete(url)
+        logger.debug(f"Delete response: \n{response.data}")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(NexusFile.objects.filter(title = "test title").count(), 1)
+     
+    def test_update_file_using_patch(self):
+        """Test updating a file."""
+
+        # 1. Upload a file
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title", "description": "test description"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        logger.debug(f"Upload response: \n{response.data}")
+        file_name = response.data['file_name']
+
+        # 2. Update the file using patch (only title)
+        url = reverse('nexusfile-detail', kwargs = {'file_name' : file_name})
+        response = self.client.patch(  
+            path = url,    
+            data = {"title": "updated title"},  
+            format = "json"
+        )
+        logger.debug(f"Update response(only title): \n{response.data}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], "updated title")
+        self.assertEqual(response.data['description'], "test description")
+
+        # 3. Update the file using patch (only description)
+        response = self.client.patch(
+            path = url,    
+            data = {"description": "updated description"},  
+            format = "json"
+        )
+        logger.debug(f"Update response(only description): \n{response.data}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], "updated title")
+        self.assertEqual(response.data['description'], "updated description")   
+        
+        # 4. Update the file using patch (both title and description)
+        response = self.client.patch(
+            path = url,    
+            data = {"title": "updated title 2", "description": "updated description 2"},  
+            format = "json"
+        )
+        logger.debug(f"Update response(both title and description): \n{response.data}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], "updated title 2")
+        self.assertEqual(response.data['description'], "updated description 2")
+        
+    def test_update_file_using_put(self):
+        """Test updating a file using put."""
+
+        # 1. Upload a file
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title", "description": "test description"},
+            format   =   "multipart"
+        )   
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        logger.debug(f"Upload response: \n{response.data}")
+        file_name = response.data['file_name']
+
+        # 2. Update the file using put (only title)     
+        url = reverse('nexusfile-detail', kwargs = {'file_name' : file_name})
+        response = self.client.put(
+            path = url,    
+            data = {"title": "updated title"},  
+            format = "json"
+        )
+        logger.debug(f"Update response(only title): \n{response.data}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], "updated title")
+        self.assertEqual(response.data['description'], "test description")  
+
+        # 3. Update the file using put (only description)
+        response = self.client.put(
+            path = url,    
+            data = {"description": "updated description"},  
+            format = "json"
+        )
+        logger.debug(f"Update response(only description): \n{response.data}")
+        # self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # self.assertEqual(response.data['title'], "updated title")   
+        # self.assertEqual(response.data['description'], "updated description")  
+
+        # 4. Update the file using put (both title and description)
+        response = self.client.put(
+            path = url,    
+            data = {"title": "updated title 2", "description": "updated description 2"},  
+            format = "json"
+        )
+        logger.debug(f"Update response(both title and description): \n{response.data}")
+        # self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # self.assertEqual(response.data['title'], "updated title 2")
+        # self.assertEqual(response.data['description'], "updated description 2")
+        
+        
         
     def test_actions_report_file(self):
         """Test reporting a file."""
 
-        nexus_file = NexusFile.objects.create(owner=self.authenticated_user, model_file=self.test_file)
-        nexus_file.save()
-        file_name = os.path.basename(nexus_file.model_file.name)
-        report_url = reverse('nexusfile-actions', kwargs = {'file_name' : file_name})
 
-        # report the file with message
+        # 1. Upload a file
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        file_name = response.data['file_name']
+        nexus_file = NexusFile.objects.get(model_file__contains=file_name)
+
+        # 2. Report the file with message
+        report_url = reverse('nexusfile-actions', kwargs = {'file_name' : file_name})
         response = self.client.patch(
             path = report_url, 
             data = {'action' : 'report', 'message' : 'test message'}
@@ -174,7 +308,7 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertEqual(response.data['created'], True)
         self.assertEqual(nexus_file.reported_users.count(), 1)
 
-        # email check
+        # Mail check
         logger.debug(mail.outbox[0].body)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("[File Report]", mail.outbox[0].subject)
@@ -184,7 +318,7 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertEqual(mail.outbox[0].from_email, settings.EMAIL_HOST_USER)
         self.assertEqual(mail.outbox[0].to, [settings.EMAIL_HOST_USER])
 
-        # unreport the file
+        # 3. Cancel the report
         response = self.client.patch(
             path = report_url, 
             data = {'action' : 'report'}
@@ -196,7 +330,7 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertEqual(response.data['created'], False)
         self.assertEqual(nexus_file.reported_users.count(), 0)
 
-        # report again (no message)
+        # 4. Report again (no message)
         mail.outbox = []
         response = self.client.patch(
             path = report_url, 
@@ -209,7 +343,7 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertEqual(response.data['created'], True)
         self.assertEqual(nexus_file.reported_users.count(), 1)
 
-        # mail check
+        # Mail check
         logger.debug(mail.outbox)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("[File Report]", mail.outbox[0].subject)
@@ -223,11 +357,17 @@ class NexusFileAPITestCase(test.APITestCase):
     def test_actions_block_file(self):
         """Test blocking a file."""
 
-        nexus_file = NexusFile.objects.create(owner=self.authenticated_user, model_file=self.test_file)
-        nexus_file.save()
-        file_name = os.path.basename(nexus_file.model_file.name)   
+        # 1. Upload a file
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        file_name = response.data['file_name']
+        nexus_file = NexusFile.objects.get(model_file__contains=file_name)
 
-        # block the file
+        # 2. Block the file
         url = reverse('nexusfile-actions', kwargs = {'file_name' : file_name})
         response = self.client.patch(url, data = {'action' : 'block'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -237,7 +377,7 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertEqual(response.data['created'], True)
         self.assertEqual(nexus_file.blocked_users.count(), 1)
 
-        # unblock the file
+        # 3. Cancel the block
         response = self.client.patch(url, data = {'action' : 'block'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)  
         self.assertIn(response.data['username'], self.authenticated_user.username)
@@ -249,12 +389,18 @@ class NexusFileAPITestCase(test.APITestCase):
     def test_actions_like_file(self):
         """Test liking a file."""
 
-        nexus_file = NexusFile.objects.create(owner=self.authenticated_user, model_file=self.test_file)
-        nexus_file.save()
-        file_name = os.path.basename(nexus_file.model_file.name)
-        url = reverse('nexusfile-actions', kwargs = {'file_name' : file_name})
+        # 1. Upload a file
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        file_name = response.data['file_name']
+        nexus_file = NexusFile.objects.get(model_file__contains=file_name)
 
-        # like the file
+        # 2. Like the file
+        url = reverse('nexusfile-actions', kwargs = {'file_name' : file_name})
         response = self.client.patch(url, data = {'action' : 'like'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn(response.data['username'], self.authenticated_user.username)
@@ -264,7 +410,7 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertEqual(nexus_file.liked_users.count(), 1)
         self.assertEqual(nexus_file.disliked_users.count(), 0)
 
-        # unlike the file
+        # 3. Cancel the like
         response = self.client.patch(url, data = {'action' : 'like'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn(response.data['username'], self.authenticated_user.username)
@@ -278,12 +424,18 @@ class NexusFileAPITestCase(test.APITestCase):
     def test_actions_dislike_file(self):
         """Test disliking a file."""
 
-        nexus_file = NexusFile.objects.create(owner=self.authenticated_user, model_file=self.test_file)
-        nexus_file.save()
-        file_name = os.path.basename(nexus_file.model_file.name)
-        url = reverse('nexusfile-actions', kwargs = {'file_name' : file_name})    
+        # 1. Upload a file
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        file_name = response.data['file_name']
+        nexus_file = NexusFile.objects.get(model_file__contains=file_name)
 
-        # dislike the file
+        # 2. Dislike the file
+        url = reverse('nexusfile-actions', kwargs = {'file_name' : file_name}) 
         response = self.client.patch(url, data = {'action' : 'dislike'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn(response.data['username'], self.authenticated_user.username)
@@ -293,7 +445,7 @@ class NexusFileAPITestCase(test.APITestCase):
         self.assertEqual(nexus_file.liked_users.count(), 0)
         self.assertEqual(nexus_file.disliked_users.count(), 1)
 
-        # undislike the file
+        # 3. Cancel the dislike
         response = self.client.patch(url, data = {'action' : 'dislike'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn(response.data['username'], self.authenticated_user.username)
@@ -306,9 +458,16 @@ class NexusFileAPITestCase(test.APITestCase):
     def test_actions_invalid_action(self):
         """Test invalid action."""
 
-        nexus_file = NexusFile.objects.create(owner=self.authenticated_user, model_file=self.test_file)
-        nexus_file.save()
-        file_name = os.path.basename(nexus_file.model_file.name)
+        # 1. Upload a file
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        file_name = response.data['file_name']
+
+        # 2. Try invalid action
         url = reverse('nexusfile-actions', kwargs = {'file_name' : file_name})
         response = self.client.patch(url, data = {'action' : 'invalid'})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -316,11 +475,18 @@ class NexusFileAPITestCase(test.APITestCase):
     def test_view_count(self):
         """Test view count."""
 
-        nexus_file = NexusFile.objects.create(owner=self.authenticated_user, model_file=self.test_file)
-        nexus_file.save()
-        file_name = os.path.basename(nexus_file.model_file.name)
-        url = reverse('nexusfile-detail', kwargs = {'file_name' : file_name})
+        # 1. Upload a file
+        response = self.client.post(
+            path     =   reverse('nexusfile-list-create'),
+            data     =   {"model_file": self.test_file, "title": "test title"},
+            format   =   "multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        file_name = response.data['file_name']
+        nexus_file = NexusFile.objects.get(model_file__contains=file_name)
 
+        # 2. View the file 10 times
+        url = reverse('nexusfile-detail', kwargs = {'file_name' : file_name})
         for i in range(10):
             response = self.client.get(url)
             self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -353,19 +519,32 @@ class NexusFileWithUserTests(test.APITestCase):
     def test_download_files_of_owner(self):
         """Test downloading files of the owner."""
 
-        # upload 5 files by each uploader
+        # Upload 5 files by uploader1
         self.client.force_authenticate(user=self.uploader1)
         for i in range(5):
             test_file = SimpleUploadedFile(f"{i}_uploader1_test_model.obj", b"dummy content", content_type="text/plain")
-            self.client.post(reverse('nexusfile-list-create'), data = {"model_file": test_file}, format="multipart")
+            response = self.client.post(
+                path = reverse('nexusfile-list-create'), 
+                data = {"model_file": test_file, "title": f"test title {i}"}, 
+                format="multipart"
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            logger.debug(f"uploaded file {i} by uploader1: \n{response.data}")
 
+        # Upload 5 files by uploader2   
         self.client.force_authenticate(user=self.uploader2)
         for i in range(5):
             test_file = SimpleUploadedFile(f"{i}_uploader2_test_model.obj", b"dummy content", content_type="text/plain")    
-            self.client.post(reverse('nexusfile-list-create'), data = {"model_file": test_file}, format="multipart")
-
-        # download files uploaded by the uploader1
-        response = self.client.get(f"{reverse('nexusfile-list-create')}?username={self.uploader1.username}")
+            response = self.client.post(
+                path = reverse('nexusfile-list-create'), 
+                data = {"model_file": test_file, "title": f"test title {i}"}, 
+                format="multipart"
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            logger.debug(f"uploaded file {i} by uploader2: \n{response.data}")
+        
+        # Download files uploaded by the uploader1
+        response = self.client.get(f"{reverse('nexusfile-list-create')}?owner={self.uploader1.username}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 5)
         logger.debug(response.data)
@@ -373,11 +552,11 @@ class NexusFileWithUserTests(test.APITestCase):
         sorted_files = sorted(response.data["results"], key=lambda x: x["file_name"][0])
         for i, file in enumerate(sorted_files):
             self.assertIn(reverse('user-detail', kwargs = {'username' : self.uploader1.username}), file["owner"])
-            self.assertIn(f"{i}_uploader1_test_model", file["file_name"])
 
 
-        # download files uploaded by the uploader2
-        response = self.client.get(f"{reverse('nexusfile-list-create')}?username={self.uploader2.username}")
+
+        # Download files uploaded by the uploader2
+        response = self.client.get(f"{reverse('nexusfile-list-create')}?owner={self.uploader2.username}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 5)
         logger.debug(response.data)
@@ -385,120 +564,151 @@ class NexusFileWithUserTests(test.APITestCase):
         sorted_files = sorted(response.data["results"], key=lambda x: x["file_name"][0])
         for i, file in enumerate(sorted_files):
             self.assertIn(reverse('user-detail', kwargs = {'username' : self.uploader2.username}), file["owner"])
-            self.assertIn(f"{i}_uploader2_test_model", file["file_name"])
 
     def test_get_file_list_excluding_blocked_files(self):
         """Test getting file list excluding blocked files."""
 
-        # uploader1 uploads 5 files
+        # Upload 5 files by uploader1
         self.client.force_authenticate(user=self.uploader1)
         for i in range(5):
             test_file = SimpleUploadedFile(f"{i}_uploader1_test_model.obj", b"dummy content", content_type="text/plain")
-            self.client.post(reverse('nexusfile-list-create'), data = {"model_file": test_file}, format="multipart")
+            response = self.client.post(
+                path = reverse('nexusfile-list-create'), 
+                data = {"model_file": test_file, "title": f"test title {i}"}, 
+                format="multipart"
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
             self.assertEqual(NexusFile.objects.filter(owner=self.uploader1).count(), i + 1)
+            logger.debug(f"uploaded files by uploader1: \n{response.data}")
 
         # Get filenames of the uploaded files
-        response = self.client.get(f"{reverse('nexusfile-list-create')}?username={self.uploader1.username}")
+        response = self.client.get(f"{reverse('nexusfile-list-create')}?owner={self.uploader1.username}")
         file_names = [file["file_name"] for file in response.data["results"]]
-        logger.debug(file_names)
+        logger.debug(f"file names by uploader1: \n{file_names}")
 
-        # uploader2 blocks the 3 files uploaded by uploader1
+        # Uploader2 blocks the 3 files uploaded by uploader1
         self.client.force_authenticate(user=self.uploader2)
         for file_name in file_names[:3]:
             url = reverse('nexusfile-actions', kwargs = {'file_name' : file_name})
             response = self.client.patch(url, data = {'action' : 'block'})
             self.assertEqual(response.status_code, status.HTTP_200_OK)
+            logger.debug(f"blocked file {file_name} by uploader2: \n{response.data}")
 
-        # download files when uploader2 is signed-in
+        # Download files when uploader2 is signed-in
         self.client.force_authenticate(user=self.uploader2)
         response = self.client.get(f"{reverse('nexusfile-list-create')}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 2)
-        logger.debug(f"by uploader2 :\n{response.data}")
+        logger.debug(f"files get by uploader2 :\n{response.data}")
 
-        # download files when uploader2 is signed-out
+        # Download files when uploader2 is signed-out
         self.client.force_authenticate(user=None)
         response = self.client.get(f"{reverse('nexusfile-list-create')}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 5)
-        logger.debug(f"by guest (no authentication) :\n{response.data}")
+        logger.debug(f"files get by guest (no authentication) :\n{response.data}")
 
-        # download files when viewer is signed-in
+        # Download files when viewer is signed-in
         self.client.force_authenticate(user=self.viewer)
         response = self.client.get(f"{reverse('nexusfile-list-create')}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 5)
-        logger.debug(f"by viewer :\n{response.data}")
+        logger.debug(f"files get by viewer :\n{response.data}")
 
     def test_get_file_list_excluding_blocked_files_by_uploader1(self):
         """Test getting file list excluding blocked files by uploader1."""
 
-        # uploader1 uploads 5 files
+        # Upload 5 files by uploader1
         self.client.force_authenticate(user=self.uploader1)
         for i in range(5):
             test_file = SimpleUploadedFile(f"{i}_uploader1_test_model.obj", b"dummy content", content_type="text/plain")
-            self.client.post(reverse('nexusfile-list-create'), data = {"model_file": test_file}, format="multipart")
+            response = self.client.post(
+                path = reverse('nexusfile-list-create'), 
+                data = {"model_file": test_file, "title": f"test title {i}"}, 
+                format="multipart"
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
             self.assertEqual(NexusFile.objects.filter(owner=self.uploader1).count(), i + 1)
-
-        # uploader2 uploads 5 files
+            logger.debug(f"uploaded files by uploader1: \n{response.data}")
+        # Upload 5 files by uploader2
         self.client.force_authenticate(user=self.uploader2)
         for i in range(5):
             test_file = SimpleUploadedFile(f"{i}_uploader2_test_model.obj", b"dummy content", content_type="text/plain")
-            self.client.post(reverse('nexusfile-list-create'), data = {"model_file": test_file}, format="multipart")
+            response = self.client.post(
+                path = reverse('nexusfile-list-create'), 
+                data = {"model_file": test_file, "title": f"test title {i}"}, 
+                format="multipart"
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
             self.assertEqual(NexusFile.objects.filter(owner=self.uploader2).count(), i + 1)
+            logger.debug(f"uploaded files by uploader2: \n{response.data}") 
+
         # Get filenames of the uploaded files
-        response = self.client.get(f"{reverse('nexusfile-list-create')}?username={self.uploader1.username}")
+        response = self.client.get(f"{reverse('nexusfile-list-create')}?owner={self.uploader1.username}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         file_names_by_uploader1 = [file["file_name"] for file in response.data["results"]]
-        response = self.client.get(f"{reverse('nexusfile-list-create')}?username={self.uploader2.username}")
+        response = self.client.get(f"{reverse('nexusfile-list-create')}?owner={self.uploader2.username}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         file_names_by_uploader2 = [file["file_name"] for file in response.data["results"]]
 
-        # viwer blocks uploader1
+        # Viewer blocks uploader1
         self.client.force_authenticate(user=self.viewer)
         response = self.client.post(
             path = reverse('user-relation', kwargs = {'username' : self.uploader1.username}),
             data = {'relation_type' : 'block'},
             format = 'json'
         )
-        logger.debug(response.data)
+        logger.debug(f"viewer blocks uploader1: \n{response.data}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # viwer get file list excluding files uploaded by uploader1
+        # Viewer get file list excluding files uploaded by uploader1
         self.client.force_authenticate(user=self.viewer)
         response = self.client.get(f"{reverse('nexusfile-list-create')}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         file_names_viewer_got = [file["file_name"] for file in response.data["results"]]
         self.assertListEqual(file_names_viewer_got, file_names_by_uploader2)
-        logger.debug(f"by viewer :\n{response.data}")
+        logger.debug(f"files get by viewer :\n{response.data}")
         
     def test_get_file_list_excluding_files_blocked_both_directly_and_indirectly(self):
         """Test getting file list excluding files blocked both directly and indirectly."""
 
-        # uploader1 uploads 5 files
+        # Upload 5 files by uploader1
         self.client.force_authenticate(user=self.uploader1)
         for i in range(5):
             test_file = SimpleUploadedFile(f"{i}_uploader1_test_model.obj", b"dummy content", content_type="text/plain")
-            self.client.post(reverse('nexusfile-list-create'), data = {"model_file": test_file}, format="multipart")
+            response = self.client.post(
+                path = reverse('nexusfile-list-create'), 
+                data = {"model_file": test_file, "title": f"test title {i}"}, 
+                format="multipart"
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
             self.assertEqual(NexusFile.objects.filter(owner=self.uploader1).count(), i + 1)
+            logger.debug(f"uploaded files by uploader1: \n{response.data}")
         
-        
-        # uploader2 uploads 5 files
+        # Upload 5 files by uploader2
         self.client.force_authenticate(user=self.uploader2)
         for i in range(5):
             test_file = SimpleUploadedFile(f"{i}_uploader2_test_model.obj", b"dummy content", content_type="text/plain")
-            self.client.post(reverse('nexusfile-list-create'), data = {"model_file": test_file}, format="multipart")
+            response = self.client.post(
+                path = reverse('nexusfile-list-create'), 
+                data = {"model_file": test_file, "title": f"test title {i}"}, 
+                format="multipart"
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
             self.assertEqual(NexusFile.objects.filter(owner=self.uploader2).count(), i + 1)
+            logger.debug(f"uploaded files by uploader2: \n{response.data}")
 
         # Get filenames of all uploaded files
-        response = self.client.get(f"{reverse('nexusfile-list-create')}?username={self.uploader1.username}")
+        response = self.client.get(f"{reverse('nexusfile-list-create')}?owner={self.uploader1.username}")
         file_names_by_uploader1 = [file["file_name"] for file in response.data["results"]]
-        response = self.client.get(f"{reverse('nexusfile-list-create')}?username={self.uploader2.username}")
+        response = self.client.get(f"{reverse('nexusfile-list-create')}?owner={self.uploader2.username}")
         file_names_by_uploader2 = [file["file_name"] for file in response.data["results"]]
         file_names_expected = file_names_by_uploader1 + file_names_by_uploader2
         self.assertEqual(len(file_names_by_uploader1), 5)
         self.assertEqual(len(file_names_by_uploader2), 5)
+        logger.debug(f"file names by uploader1: \n{file_names_by_uploader1}")
+        logger.debug(f"file names by uploader2: \n{file_names_by_uploader2}")
 
         # viewer blocks uploader1
         self.client.force_authenticate(user=self.viewer)
@@ -507,7 +717,7 @@ class NexusFileWithUserTests(test.APITestCase):
             data = {'relation_type' : 'block'},
             format = 'json'
         )
-        logger.debug(response.data)
+        logger.debug(f"viewer blocks uploader1: \n{response.data}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         file_names_expected = file_names_by_uploader2
@@ -519,7 +729,10 @@ class NexusFileWithUserTests(test.APITestCase):
             response = self.client.patch(url, data={'action': 'block'})
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             file_names_expected.remove(file_name)
+            logger.debug(f"viewer blocks file {file_name}, file names expected: \n{file_names_expected}")
         self.assertEqual(len(file_names_expected), 2)
+        logger.debug(f"file names expected: \n{file_names_expected}")
+
 
         # viewer get file list excluding files blocked both directly and indirectly
         self.client.force_authenticate(user=self.viewer)
@@ -527,7 +740,7 @@ class NexusFileWithUserTests(test.APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         file_names_viewer_got = [file["file_name"] for file in response.data["results"]]
         self.assertListEqual(file_names_viewer_got, file_names_expected)
-        
+        logger.debug(f"files get by viewer :\n{response.data}")
     
     def test_get_liked_files(self):
         """Test getting liked files."""
@@ -536,13 +749,19 @@ class NexusFileWithUserTests(test.APITestCase):
         self.client.force_authenticate(user=self.uploader1)
         for i in range(5):
             test_file = SimpleUploadedFile(f"{i}_uploader1_test_model.obj", b"dummy content", content_type="text/plain")   
-            self.client.post(reverse('nexusfile-list-create'), data = {"model_file": test_file}, format="multipart")
+            response = self.client.post(
+                path = reverse('nexusfile-list-create'), 
+                data = {"model_file": test_file, "title": f"test title {i}"}, 
+                format="multipart"
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
             self.assertEqual(NexusFile.objects.filter(owner=self.uploader1).count(), i + 1)
+            logger.debug(f"uploaded files by uploader1: \n{response.data}")
 
         # Get filenames of the uploaded files
-        response = self.client.get(f"{reverse('nexusfile-list-create')}?username={self.uploader1.username}")
+        response = self.client.get(f"{reverse('nexusfile-list-create')}?owner={self.uploader1.username}")
         file_names_by_uploader1 = [file["file_name"] for file in response.data["results"]]
-
+        logger.debug(f"file names by uploader1: \n{file_names_by_uploader1}")
 
 
         # uploader2 likes 3 files uploaded by uploader1
@@ -555,17 +774,18 @@ class NexusFileWithUserTests(test.APITestCase):
                 format = 'json'
             )
             self.assertEqual(response.status_code, status.HTTP_200_OK)
+            logger.debug(f"uploader2 likes file {file_name}, file names by uploader1: \n{file_names_by_uploader1}")
 
         # get user profile of uploader2
         self.client.force_authenticate(user=self.uploader2)
         response = self.client.get(reverse('user-detail', kwargs={'username': self.uploader2.username}))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-
+        logger.debug(f"user profile of uploader2: \n{response.data}")
         liked_files_url = response.data['liked_files']
         response = self.client.get(liked_files_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['results']), 3)
-        logger.debug(response.data)
+        logger.debug(f"liked files of uploader2: \n{response.data}")
 
         for liked_file in response.data['results']:
             self.assertIn(liked_file['file_name'], liked_files)

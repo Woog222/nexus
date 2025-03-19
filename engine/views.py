@@ -34,9 +34,10 @@ class NexusFileListCreateAPIView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         model_file = self.request.FILES.get("model_file")  # Retrieve the uploaded file
-        if not model_file:
-            raise serializers.ValidationError({"model_file": "This field is required."})
-        serializer.save(owner=self.request.user, model_file=model_file)
+        title = self.request.data.get("title")
+        if (not model_file) or (not title):
+            raise serializers.ValidationError({"model_file": "This field is required.", "title": "This field is required."})
+        serializer.save(owner=self.request.user, model_file=model_file, title=title)
         logger.info(f"[file create] {serializer.data}")
 
     def get_queryset(self):
@@ -64,28 +65,23 @@ class NexusFileListCreateAPIView(generics.ListCreateAPIView):
             queryset = queryset.exclude(owner__in=blocked_users)
 
         """
-        Filtering based on username query parameter (owner)
+        Query parameter: 
+            owner (username of the owner)
+            liked_user (username of the liked user)
         """
-        # username query parameter to filter files by owner
-        username = self.request.GET.get('username', None)
-        if username:
-            user = get_object_or_404(get_user_model(), username=username)
+        owner = self.request.GET.get('owner', None)
+        if owner:
+            user = get_object_or_404(get_user_model(), username=owner)
             queryset = queryset.filter(owner=user)  # Files of a specific user
 
-        """
-        Filtering based on liked files
-        """
-        # username query parameter to filter files by owner
-        liked_user_name = self.request.GET.get('liked_user_name', None)
-        if liked_user_name:
-            user = get_object_or_404(get_user_model(), username=liked_user_name)
+        liked_user = self.request.GET.get('liked_user', None)
+        if liked_user:
+            user = get_object_or_404(get_user_model(), username=liked_user)
             queryset = queryset.filter(liked_users=user)  # Files of a specific user
 
         return queryset
 
-
-
-class NexusFileRetrieveDestroyAPIView(generics.RetrieveDestroyAPIView):
+class NexusFileRetrieveDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]  
     queryset = NexusFile.objects.all()
     serializer_class = NexusFileSerializer

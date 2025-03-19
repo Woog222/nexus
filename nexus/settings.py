@@ -296,20 +296,29 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+
+        # Accounts
         'accounts' : {
             'handlers' : ['debug_file', 'accounts_file'],
-            'level' : 'INFO',
+            'level' : 'DEBUG',
             'progatate' : False
         },
+
+
+        # Engine
         'engine' : {
             'handlers' : ['debug_file', 'engine_file'],
-            'level' : 'INFO',
+            'level' : 'DEBUG',
             'progatate' : False
         },
+
+
+        # AuthApp
         'authApp' : {
             'handlers' : ['debug_file', 'authApp_file'],
-            'level' : 'INFO',
+            'level' : 'DEBUG',
             'progatate' : False
         },
+
     }
 }

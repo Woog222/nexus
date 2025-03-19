@@ -11,15 +11,20 @@ logger= logging.getLogger(__name__)
 
 def get_NexusFile_upload_path(instance, filename):
     """Generate a unique path for user profile images."""
+    import uuid
+
     upload_to = 'nexus_models'
-    new_filename = f'{instance.owner.username}__{filename}'
+    extension = os.path.splitext(filename)[1]
+    new_filename = f'{uuid.uuid4()}{extension}'
     return os.path.join(upload_to, new_filename)
 
 
 
 
 class NexusFile(models.Model):
-    owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=False)  # Corrected ForeignKey field
+    owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=False)  
+    title = models.CharField(max_length=255, null=False, blank=False)
+    description = models.TextField(null=True, blank=True)
     model_file = models.FileField(upload_to=get_NexusFile_upload_path, null=False, blank=False)
     views = models.BigIntegerField(null=False, blank=False, default=0)
 

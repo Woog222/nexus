@@ -15,8 +15,15 @@ class NexusFileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NexusFile
-        fields = ['owner', 'model_file', 'likes', 'dislikes', 'views', 'file_name']
-        read_only_fields = ['owner', 'model_file', 'likes', 'dislikes', 'views', 'file_name']
+        fields = [
+            # read only fields
+            'owner', 'model_file', 'likes', 'dislikes', 'views', 'file_name', 
+            # editable fields
+            'title', 'description'
+        ]
+        read_only_fields = [
+            'owner', 'model_file', 'likes', 'dislikes', 'views', 'file_name'
+        ]
 
     def get_owner(self, obj):
         request = self.context.get('request')
@@ -31,10 +38,3 @@ class NexusFileSerializer(serializers.ModelSerializer):
 
     def get_dislikes(self, obj):
         return obj.disliked_users.all().count()
-
-
-"""
-    def to_representation(self, instance):
-        # Customize the representation format to "name.file_extension"
-        return f"{instance.name}.{instance.file_extension}"
-"""
