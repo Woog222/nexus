@@ -80,7 +80,7 @@ REST_AUTH = {
     'JWT_AUTH_REFRESH_COOKIE': 'refresh-token',
     'JWT_AUTH_REFRESH_COOKIE_PATH': '/',
     'JWT_AUTH_SECURE': False, # the cookie will only be sent through https scheme
-    'JWT_AUTH_HTTPONLY': False,
+    'JWT_AUTH_HTTPONLY': True,
     'JWT_AUTH_SAMESITE': 'Lax',
     'JWT_AUTH_RETURN_EXPIRATION': True,
     'JWT_AUTH_COOKIE_USE_CSRF': False,
@@ -93,9 +93,10 @@ REST_AUTH = {
 APPLE 
 """
 # Apple OAuth (Sign in with Apple)
-APPLE_REDIRECT_URI = "https://www.cvan.shop/auth/apple/callback/"
+APPLE_REDIRECT_URI = "https://www.cvan.shop/auth/apple/web-callback/"
 APPLE_PUBLIC_KEY_URL = "https://appleid.apple.com/auth/keys"
 APPLE_TOKEN_URL = "https://appleid.apple.com/auth/token"
+APPLE_CLIENT_ID = os.getenv("APPLE_CLIENT_ID")
 
 APPLE_USERNAME_PREFIX = "APPLE" # user id : {prefix}__{apple_sub}
 

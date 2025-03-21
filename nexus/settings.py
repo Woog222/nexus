@@ -79,6 +79,8 @@ INSTALLED_APPS = [
 
     'allauth.socialaccount',
     'allauth.socialaccount.providers.apple',
+
+    # 'corsheaders',
     
     # django apps
     'accounts',
@@ -111,6 +113,7 @@ REST_FRAMEWORK = {
 }
 
 MIDDLEWARE = [
+     # 'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -121,6 +124,9 @@ MIDDLEWARE = [
 
     "allauth.account.middleware.AccountMiddleware",
 ]
+
+
+
 
 ROOT_URLCONF = 'nexus.urls'
 

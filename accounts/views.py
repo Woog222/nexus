@@ -62,6 +62,7 @@ class NexusUserRelationView(generics.GenericAPIView):
     lookup_field = 'username'
     lookup_url_kwarg = 'username'
     pagination_class = NexusUserRelationPagination
+    queryset = get_user_model().objects.all()
 
     @property
     def allowed_relation_types_for_setup(self):
@@ -80,7 +81,7 @@ class NexusUserRelationView(generics.GenericAPIView):
         """
         return ['follower_users', 'following_users', 'blocked_users', 'reported_users']
 
-    def get_queryset(self, user, relation_type:str, **kwargs):
+    def get_relation_queryset(self, user, relation_type:str, **kwargs):
         """
         Get queryset for the relation type
         """
@@ -120,7 +121,7 @@ class NexusUserRelationView(generics.GenericAPIView):
         user = get_object_or_404(get_user_model(), username=username)
         relation_type = request.GET.get('relation_type', None)
         try:
-           queryset = self.get_queryset(user, relation_type, **kwargs)
+           queryset = self.get_relation_queryset(user, relation_type, **kwargs)
         except AssertionError:
             return Response({"error": f"Invalid Query parameter 'relation_type' ({relation_type}). Must be {self.allowed_relation_types_for_lookup}"}, status=status.HTTP_400_BAD_REQUEST)
   
@@ -128,6 +129,10 @@ class NexusUserRelationView(generics.GenericAPIView):
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
+
+        assert False, (
+            "Please set the appropriate pagination_class in the view"
+        )
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

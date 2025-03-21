@@ -24,7 +24,7 @@ def get_NexusFile_upload_path(instance, filename):
 class NexusFile(models.Model):
     owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=False)  
     title = models.CharField(max_length=255, null=False, blank=False)
-    description = models.TextField(null=True, blank=True)
+    description = models.TextField(null=False, blank=True, default='')
     model_file = models.FileField(upload_to=get_NexusFile_upload_path, null=False, blank=False)
     views = models.BigIntegerField(null=False, blank=False, default=0)
 

@@ -587,7 +587,7 @@ class NexusUserComprehensiveAPITests(test.APITestCase):
         user0 is followed by user1 ~ user 4
         """
 
-        # follow user0 from user1 ~ user4
+        # User1~4 follow user0
         for i in range(1, 5):
             follow_url = reverse(USER_RELATION_URL_NAME, kwargs={'username': self.users[0].username })
             payload = {
